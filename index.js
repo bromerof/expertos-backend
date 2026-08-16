@@ -34,3 +34,24 @@ app.post('/api/expertos', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Servidor corriendo en http://localhost:${PORT}`);
 });
+// Endpoint para listar y buscar expertos
+app.get('/api/expertos', async (req, res) => {
+  try {
+    const filtro = {};
+
+    // Si el usuario envía ?categoria=Plomeria, lo agregamos al filtro
+    if (req.query.categoria) {
+      filtro.categoria = req.query.categoria;
+    }
+
+    // Si el usuario envía ?ubicacion=Medellin, lo agregamos al filtro
+    if (req.query.ubicacion) {
+      filtro.ubicacion = req.query.ubicacion;
+    }
+
+    const expertos = await Experto.find(filtro);
+    res.status(200).json(expertos);
+  } catch (error) {
+    res.status(500).json({ mensaje: 'Error al buscar expertos', error: error.message });
+  }
+});
