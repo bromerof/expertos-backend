@@ -55,3 +55,17 @@ app.get('/api/expertos', async (req, res) => {
     res.status(500).json({ mensaje: 'Error al buscar expertos', error: error.message });
   }
 });
+// Endpoint para obtener UN experto específico por su ID
+app.get('/api/expertos/:id', async (req, res) => {
+  try {
+    const experto = await Experto.findById(req.params.id);
+
+    if (!experto) {
+      return res.status(404).json({ mensaje: 'Experto no encontrado' });
+    }
+
+    res.status(200).json(experto);
+  } catch (error) {
+    res.status(500).json({ mensaje: 'Error al buscar el experto', error: error.message });
+  }
+});
