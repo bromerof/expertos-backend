@@ -69,3 +69,36 @@ app.get('/api/expertos/:id', async (req, res) => {
     res.status(500).json({ mensaje: 'Error al buscar el experto', error: error.message });
   }
 });
+// Endpoint para actualizar un experto existente
+app.put('/api/expertos/:id', async (req, res) => {
+  try {
+    const expertoActualizado = await Experto.findByIdAndUpdate(
+      req.params.id,
+      req.body,
+      { new: true, runValidators: true }
+    );
+
+    if (!expertoActualizado) {
+      return res.status(404).json({ mensaje: 'Experto no encontrado' });
+    }
+
+    res.status(200).json(expertoActualizado);
+  } catch (error) {
+    res.status(400).json({ mensaje: 'Error al actualizar el experto', error: error.message });
+  }
+});
+
+// Endpoint para eliminar un experto
+app.delete('/api/expertos/:id', async (req, res) => {
+  try {
+    const expertoEliminado = await Experto.findByIdAndDelete(req.params.id);
+
+    if (!expertoEliminado) {
+      return res.status(404).json({ mensaje: 'Experto no encontrado' });
+    }
+
+    res.status(200).json({ mensaje: 'Experto eliminado correctamente', experto: expertoEliminado });
+  } catch (error) {
+    res.status(500).json({ mensaje: 'Error al eliminar el experto', error: error.message });
+  }
+});
