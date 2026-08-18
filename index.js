@@ -9,6 +9,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const Suscripcion = require('./models/Suscripcion');
 const authRoutes = require('./routes/auth');
+const verificarToken = require('./middleware/verificarToken');
 
 // Middleware: permite que el servidor entienda JSON en las peticiones
 app.use(express.json());
@@ -72,9 +73,13 @@ app.get('/api/expertos/:id', async (req, res) => {
     res.status(500).json({ mensaje: 'Error al buscar el experto', error: error.message });
   }
 });
-// Endpoint para actualizar un experto existente
-app.put('/api/expertos/:id', async (req, res) => {
+// Endpoint para actualizar un experto existente (PROTEGIDO)
+app.put('/api/expertos/:id', verificarToken, async (req, res) => {
   try {
+    if (req.usuario.id !== req.params.id) {
+      return res.status(403).json({ mensaje: 'No tienes permiso para editar este perfil' });
+    }
+
     const expertoActualizado = await Experto.findByIdAndUpdate(
       req.params.id,
       req.body,
@@ -91,9 +96,13 @@ app.put('/api/expertos/:id', async (req, res) => {
   }
 });
 
-// Endpoint para eliminar un experto
-app.delete('/api/expertos/:id', async (req, res) => {
+// Endpoint para eliminar un experto (PROTEGIDO)
+app.delete('/api/expertos/:id', verificarToken, async (req, res) => {
   try {
+    if (req.usuario.id !== req.params.id) {
+      return res.status(403).json({ mensaje: 'No tienes permiso para eliminar este perfil' });
+    }
+
     const expertoEliminado = await Experto.findByIdAndDelete(req.params.id);
 
     if (!expertoEliminado) {
