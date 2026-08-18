@@ -7,9 +7,12 @@ const Experto = require('./models/Experto');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const Suscripcion = require('./models/Suscripcion');
+const authRoutes = require('./routes/auth');
 
 // Middleware: permite que el servidor entienda JSON en las peticiones
 app.use(express.json());
+app.use('/api/auth', authRoutes);
 
 // Conexión a MongoDB
 mongoose.connect(process.env.MONGODB_URI)
@@ -126,5 +129,38 @@ app.get('/api/expertos/:id/contacto', async (req, res) => {
     res.status(200).json({ enlaceWhatsApp });
   } catch (error) {
     res.status(500).json({ mensaje: 'Error al generar el enlace de contacto', error: error.message });
+  }
+});
+// Endpoint para activar (simular) la suscripción de un experto
+app.post('/api/expertos/:id/suscripcion', async (req, res) => {
+  try {
+    const experto = await Experto.findById(req.params.id);
+
+    if (!experto) {
+      return res.status(404).json({ mensaje: 'Experto no encontrado' });
+    }
+
+    // Calculamos la fecha de renovación: 1 mes después de hoy
+    const fechaRenovacion = new Date();
+    fechaRenovacion.setMonth(fechaRenovacion.getMonth() + 1);
+
+    const nuevaSuscripcion = new Suscripcion({
+      experto: experto._id,
+      fechaRenovacion: fechaRenovacion
+    });
+
+    const suscripcionGuardada = await nuevaSuscripcion.save();
+
+    // Activamos el plan Pro del experto
+    experto.plan = 'pro';
+    await experto.save();
+
+    res.status(201).json({
+      mensaje: 'Suscripción activada correctamente',
+      suscripcion: suscripcionGuardada,
+      experto: experto
+    });
+  } catch (error) {
+    res.status(400).json({ mensaje: 'Error al activar la suscripción', error: error.message });
   }
 });
