@@ -102,3 +102,29 @@ app.delete('/api/expertos/:id', async (req, res) => {
     res.status(500).json({ mensaje: 'Error al eliminar el experto', error: error.message });
   }
 });
+// Endpoint para generar el enlace de contacto por WhatsApp
+app.get('/api/expertos/:id/contacto', async (req, res) => {
+  try {
+    const experto = await Experto.findById(req.params.id);
+
+    if (!experto) {
+      return res.status(404).json({ mensaje: 'Experto no encontrado' });
+    }
+
+    // Limpiar el número: nos aseguramos de que solo tenga dígitos
+    const numeroLimpio = experto.whatsapp.replace(/\D/g, '');
+
+    // Agregar el código de país de Colombia si no lo tiene ya
+    const numeroConPais = numeroLimpio.startsWith('57')
+      ? numeroLimpio
+      : `57${numeroLimpio}`;
+
+    const mensaje = `Hola ${experto.nombre}, te contacto a través de EXPERTOS. Vi tu perfil de ${experto.categoria} y quisiera más información sobre tus servicios.`;
+
+    const enlaceWhatsApp = `https://wa.me/${numeroConPais}?text=${encodeURIComponent(mensaje)}`;
+
+    res.status(200).json({ enlaceWhatsApp });
+  } catch (error) {
+    res.status(500).json({ mensaje: 'Error al generar el enlace de contacto', error: error.message });
+  }
+});
