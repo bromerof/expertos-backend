@@ -32,6 +32,10 @@ const expertoSchema = new mongoose.Schema({
     required: true,
     select: false
   },
+    foto: {
+    type: String,
+    default: ''
+  },
   anosExperiencia: {
     type: Number,
     default: 0
@@ -44,6 +48,11 @@ const expertoSchema = new mongoose.Schema({
   verificado: {
     type: Boolean,
     default: false
+  },
+    rol: {
+    type: String,
+    enum: ['experto', 'admin'],
+    default: 'experto'
   },
   fechaCreacion: {
     type: Date,

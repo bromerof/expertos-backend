@@ -10,10 +10,15 @@ const PORT = process.env.PORT || 3000;
 const Suscripcion = require('./models/Suscripcion');
 const authRoutes = require('./routes/auth');
 const verificarToken = require('./middleware/verificarToken');
+const adminRoutes = require('./routes/admin');
+const multer = require('multer');
+const { storage } = require('./config/cloudinary');
+const upload = multer({ storage });
 
 // Middleware: permite que el servidor entienda JSON en las peticiones
 app.use(express.json());
 app.use('/api/auth', authRoutes);
+app.use('/api/admin', adminRoutes);
 
 // Conexión a MongoDB
 mongoose.connect(process.env.MONGODB_URI)
@@ -171,5 +176,31 @@ app.post('/api/expertos/:id/suscripcion', async (req, res) => {
     });
   } catch (error) {
     res.status(400).json({ mensaje: 'Error al activar la suscripción', error: error.message });
+  }
+});
+// Endpoint para subir/actualizar la foto de perfil de un experto
+app.post('/api/expertos/:id/foto', verificarToken, upload.single('foto'), async (req, res) => {
+  try {
+    if (req.usuario.id !== req.params.id) {
+      return res.status(403).json({ mensaje: 'No tienes permiso para modificar este perfil' });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ mensaje: 'No se recibió ningún archivo de imagen' });
+    }
+
+    const experto = await Experto.findByIdAndUpdate(
+      req.params.id,
+      { foto: req.file.path },
+      { new: true }
+    );
+
+    if (!experto) {
+      return res.status(404).json({ mensaje: 'Experto no encontrado' });
+    }
+
+    res.status(200).json({ mensaje: 'Foto actualizada correctamente', experto });
+  } catch (error) {
+    res.status(500).json({ mensaje: 'Error al subir la foto', error: error.message });
   }
 });
