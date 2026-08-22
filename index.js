@@ -2,10 +2,12 @@
 
 require('dotenv').config();
 const express = require('express');
+const cors = require('cors');
 const mongoose = require('mongoose');
 const Experto = require('./models/Experto');
 
 const app = express();
+app.use(cors());
 const PORT = process.env.PORT || 3000;
 const Suscripcion = require('./models/Suscripcion');
 const authRoutes = require('./routes/auth');
@@ -14,6 +16,7 @@ const adminRoutes = require('./routes/admin');
 const multer = require('multer');
 const { storage } = require('./config/cloudinary');
 const upload = multer({ storage });
+
 
 // Middleware: permite que el servidor entienda JSON en las peticiones
 app.use(express.json());
