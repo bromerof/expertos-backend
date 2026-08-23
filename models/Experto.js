@@ -14,13 +14,22 @@ const expertoSchema = new mongoose.Schema({
   descripcion: {
     type: String
   },
-  ubicacion: {
-    type: String,
-    required: true
+    ubicaciones: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Municipio'
+  }],
+  atiendePresencial: {
+    type: Boolean,
+    default: true
   },
-  whatsapp: {
+  atiendeVirtual: {
+    type: Boolean,
+    default: false
+  },
+    whatsapp: {
     type: String,
-    required: true
+    required: true,
+    unique: true
   },
   correo: {
     type: String,

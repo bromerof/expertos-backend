@@ -6,10 +6,38 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const Experto = require('../models/Experto');
 
+// Convierte un texto a formato "Primera Letra Mayúscula" en cada palabra
+function normalizarTexto(texto) {
+  if (!texto) return texto;
+  return texto
+    .trim()
+    .toLowerCase()
+    .split(' ')
+    .filter(palabra => palabra !== '')
+    .map(palabra => palabra.charAt(0).toUpperCase() + palabra.slice(1))
+    .join(' ');
+}
+
+function correoValido(correo) {
+  const patron = /^[^\s@]+@[^\s@]+\.[a-zA-Z]{2,}$/;
+  return patron.test(correo);
+}
+
 // Registro de un nuevo experto (con contraseña)
 router.post('/registro', async (req, res) => {
   try {
     const { contraseña, ...restoDatos } = req.body;
+
+        if (restoDatos.nombre) {
+      restoDatos.nombre = normalizarTexto(restoDatos.nombre);
+    }
+
+        if (restoDatos.correo) {
+      restoDatos.correo = restoDatos.correo.trim().toLowerCase();
+      if (!correoValido(restoDatos.correo)) {
+        return res.status(400).json({ mensaje: 'El correo electronico no tiene un formato valido' });
+      }
+    }
 
     if (!contraseña) {
       return res.status(400).json({ mensaje: 'La contraseña es obligatoria' });
@@ -38,12 +66,14 @@ router.post('/login', async (req, res) => {
   try {
     const { correo, contraseña } = req.body;
 
+        const correoNormalizado = correo ? correo.trim().toLowerCase() : correo;
+
     if (!correo || !contraseña) {
       return res.status(400).json({ mensaje: 'Correo y contraseña son obligatorios' });
     }
 
     // Como "contraseña" tiene select:false, la pedimos explícitamente con +contraseña
-    const experto = await Experto.findOne({ correo }).select('+contraseña');
+        const experto = await Experto.findOne({ correo: correoNormalizado }).select('+contraseña');
 
     if (!experto) {
       return res.status(401).json({ mensaje: 'Credenciales incorrectas' });

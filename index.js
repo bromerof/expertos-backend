@@ -1,6 +1,16 @@
 // index.js — Servidor de EXPERTOS conectado a MongoDB
 
 require('dotenv').config();
+function normalizarTexto(texto) {
+  if (!texto) return texto;
+  return texto
+    .trim()
+    .toLowerCase()
+    .split(' ')
+    .filter(palabra => palabra !== '')
+    .map(palabra => palabra.charAt(0).toUpperCase() + palabra.slice(1))
+    .join(' ');
+}
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
@@ -16,7 +26,8 @@ const adminRoutes = require('./routes/admin');
 const multer = require('multer');
 const { storage } = require('./config/cloudinary');
 const upload = multer({ storage });
-
+const Departamento = require('./models/Departamento');
+const Municipio = require('./models/Municipio');
 
 // Middleware: permite que el servidor entienda JSON en las peticiones
 app.use(express.json());
@@ -31,7 +42,30 @@ mongoose.connect(process.env.MONGODB_URI)
 app.get('/', (req, res) => {
   res.send('¡Hola! El servidor de EXPERTOS está funcionando 🎉');
 });
+// Endpoint para listar todos los departamentos
+app.get('/api/departamentos', async (req, res) => {
+  try {
+    const departamentos = await Departamento.find().sort({ nombre: 1 });
+    res.status(200).json(departamentos);
+  } catch (error) {
+    res.status(500).json({ mensaje: 'Error al obtener departamentos', error: error.message });
+  }
+});
 
+// Endpoint para listar municipios, opcionalmente filtrados por departamento
+app.get('/api/municipios', async (req, res) => {
+  try {
+    const filtro = {};
+    if (req.query.departamento) {
+      filtro.departamento = req.query.departamento;
+    }
+
+    const municipios = await Municipio.find(filtro).sort({ nombre: 1 });
+    res.status(200).json(municipios);
+  } catch (error) {
+    res.status(500).json({ mensaje: 'Error al obtener municipios', error: error.message });
+  }
+});
 // Endpoint para crear un nuevo experto
 app.post('/api/expertos', async (req, res) => {
   try {
@@ -51,17 +85,31 @@ app.get('/api/expertos', async (req, res) => {
   try {
     const filtro = {};
 
-    // Si el usuario envía ?categoria=Plomeria, lo agregamos al filtro
+    // Si el usuario envía ?categoria=Plomeria, lo agregamos al filtro (sin importar mayúsculas/minúsculas)
     if (req.query.categoria) {
-      filtro.categoria = req.query.categoria;
+      filtro.categoria = new RegExp(req.query.categoria, 'i');
     }
 
-    // Si el usuario envía ?ubicacion=Medellin, lo agregamos al filtro
+    // Si el usuario envía ?busqueda=algo, buscamos coincidencias en nombre O categoria
+    if (req.query.busqueda) {
+      filtro.$or = [
+        { nombre: new RegExp(req.query.busqueda, 'i') },
+        { categoria: new RegExp(req.query.busqueda, 'i') }
+      ];
+    }
+
+    // Si el usuario envía ?ubicacion=Medellin, buscamos el municipio y filtramos por su ID
     if (req.query.ubicacion) {
-      filtro.ubicacion = req.query.ubicacion;
+      const municipiosCoincidentes = await Municipio.find({
+        nombre: new RegExp(req.query.ubicacion, 'i')
+      });
+      filtro.ubicaciones = { $in: municipiosCoincidentes.map(m => m._id) };
     }
 
-    const expertos = await Experto.find(filtro);
+    const expertos = await Experto.find(filtro).populate({
+      path: 'ubicaciones',
+      populate: { path: 'departamento' }
+    });
     res.status(200).json(expertos);
   } catch (error) {
     res.status(500).json({ mensaje: 'Error al buscar expertos', error: error.message });
@@ -70,7 +118,10 @@ app.get('/api/expertos', async (req, res) => {
 // Endpoint para obtener UN experto específico por su ID
 app.get('/api/expertos/:id', async (req, res) => {
   try {
-    const experto = await Experto.findById(req.params.id);
+    const experto = await Experto.findById(req.params.id).populate({
+      path: 'ubicaciones',
+      populate: { path: 'departamento' }
+    });
 
     if (!experto) {
       return res.status(404).json({ mensaje: 'Experto no encontrado' });
@@ -87,7 +138,9 @@ app.put('/api/expertos/:id', verificarToken, async (req, res) => {
     if (req.usuario.id !== req.params.id) {
       return res.status(403).json({ mensaje: 'No tienes permiso para editar este perfil' });
     }
-
+    if (req.body.nombre) {
+      req.body.nombre = normalizarTexto(req.body.nombre);
+    }
     const expertoActualizado = await Experto.findByIdAndUpdate(
       req.params.id,
       req.body,
