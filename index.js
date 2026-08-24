@@ -234,6 +234,60 @@ app.post('/api/expertos/:id/suscripcion', async (req, res) => {
     res.status(400).json({ mensaje: 'Error al activar la suscripción', error: error.message });
   }
 });
+
+// Endpoint para subir/actualizar la foto del FRENTE del documento de identidad
+app.post('/api/expertos/:id/foto-documento-frente', verificarToken, upload.single('fotoDocumentoFrente'), async (req, res) => {
+  try {
+    if (req.usuario.id !== req.params.id) {
+      return res.status(403).json({ mensaje: 'No tienes permiso para modificar este perfil' });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ mensaje: 'No se recibió ningún archivo de imagen' });
+    }
+
+    const experto = await Experto.findByIdAndUpdate(
+      req.params.id,
+      { fotoDocumentoFrente: req.file.path },
+      { new: true }
+    );
+
+    if (!experto) {
+      return res.status(404).json({ mensaje: 'Experto no encontrado' });
+    }
+
+    res.status(200).json({ mensaje: 'Foto del frente del documento actualizada correctamente', experto });
+  } catch (error) {
+    res.status(500).json({ mensaje: 'Error al subir la foto del documento', error: error.message });
+  }
+});
+
+// Endpoint para subir/actualizar la foto del REVERSO del documento de identidad
+app.post('/api/expertos/:id/foto-documento-reverso', verificarToken, upload.single('fotoDocumentoReverso'), async (req, res) => {
+  try {
+    if (req.usuario.id !== req.params.id) {
+      return res.status(403).json({ mensaje: 'No tienes permiso para modificar este perfil' });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ mensaje: 'No se recibió ningún archivo de imagen' });
+    }
+
+    const experto = await Experto.findByIdAndUpdate(
+      req.params.id,
+      { fotoDocumentoReverso: req.file.path },
+      { new: true }
+    );
+
+    if (!experto) {
+      return res.status(404).json({ mensaje: 'Experto no encontrado' });
+    }
+
+    res.status(200).json({ mensaje: 'Foto del reverso del documento actualizada correctamente', experto });
+  } catch (error) {
+    res.status(500).json({ mensaje: 'Error al subir la foto del documento', error: error.message });
+  }
+});
 // Endpoint para subir/actualizar la foto de perfil de un experto
 app.post('/api/expertos/:id/foto', verificarToken, upload.single('foto'), async (req, res) => {
   try {

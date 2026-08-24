@@ -26,10 +26,32 @@ const expertoSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+    coberturaVirtualNacional: {
+    type: Boolean,
+    default: false
+  },
     whatsapp: {
     type: String,
     required: true,
     unique: true
+  },
+    tipoDocumento: {
+    type: String,
+    enum: ['CC', 'CE', 'Pasaporte'],
+    default: 'CC'
+  },
+  numeroDocumento: {
+    type: String,
+    required: true,
+    unique: true
+  },
+    fotoDocumentoFrente: {
+    type: String,
+    default: ''
+  },
+  fotoDocumentoReverso: {
+    type: String,
+    default: ''
   },
   correo: {
     type: String,

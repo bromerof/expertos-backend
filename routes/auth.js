@@ -37,6 +37,9 @@ router.post('/registro', async (req, res) => {
       if (!correoValido(restoDatos.correo)) {
         return res.status(400).json({ mensaje: 'El correo electronico no tiene un formato valido' });
       }
+          if (restoDatos.numeroDocumento) {
+      restoDatos.numeroDocumento = restoDatos.numeroDocumento.trim();
+    }
     }
 
     if (!contraseña) {
