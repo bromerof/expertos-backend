@@ -28,6 +28,8 @@ const { storage } = require('./config/cloudinary');
 const upload = multer({ storage });
 const Departamento = require('./models/Departamento');
 const Municipio = require('./models/Municipio');
+const Categoria = require('./models/Categoria');
+const Profesion = require('./models/Profesion');
 
 // Middleware: permite que el servidor entienda JSON en las peticiones
 app.use(express.json());
@@ -64,6 +66,29 @@ app.get('/api/municipios', async (req, res) => {
     res.status(200).json(municipios);
   } catch (error) {
     res.status(500).json({ mensaje: 'Error al obtener municipios', error: error.message });
+  }
+});
+// Endpoint para listar todas las categorías
+app.get('/api/categorias', async (req, res) => {
+  try {
+    const categorias = await Categoria.find().sort({ orden: 1 });
+    res.status(200).json(categorias);
+  } catch (error) {
+    res.status(500).json({ mensaje: 'Error al obtener categorías', error: error.message });
+  }
+});
+// Endpoint para listar profesiones, opcionalmente filtradas por categoría
+app.get('/api/profesiones', async (req, res) => {
+  try {
+    const filtro = {};
+    if (req.query.categoria) {
+      filtro.categoria = req.query.categoria;
+    }
+
+    const profesiones = await Profesion.find(filtro).sort({ nombre: 1 });
+    res.status(200).json(profesiones);
+  } catch (error) {
+    res.status(500).json({ mensaje: 'Error al obtener profesiones', error: error.message });
   }
 });
 // Endpoint para crear un nuevo experto
