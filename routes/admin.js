@@ -9,7 +9,11 @@ const verificarAdmin = require('../middleware/verificarAdmin');
 // Listar perfiles pendientes de aprobación
 router.get('/expertos-pendientes', verificarToken, verificarAdmin, async (req, res) => {
   try {
-    const pendientes = await Experto.find({ verificado: false });
+    const pendientes = await Experto.find({ verificado: false })
+      .populate({
+        path: 'profesion',
+        populate: { path: 'categoria' }
+      });
     res.status(200).json(pendientes);
   } catch (error) {
     res.status(500).json({ mensaje: 'Error al obtener expertos pendientes', error: error.message });

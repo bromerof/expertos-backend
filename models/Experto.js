@@ -7,8 +7,9 @@ const expertoSchema = new mongoose.Schema({
     type: String,
     required: true
   },
-  categoria: {
-    type: String,
+   profesion: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Profesion',
     required: true
   },
   descripcion: {

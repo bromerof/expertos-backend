@@ -110,16 +110,23 @@ app.get('/api/expertos', async (req, res) => {
   try {
     const filtro = {};
 
-    // Si el usuario envía ?categoria=Plomeria, lo agregamos al filtro (sin importar mayúsculas/minúsculas)
+    // Si el usuario envía ?categoria=Plomeria, buscamos las profesiones que coincidan
+    // y filtramos los expertos que tengan alguna de esas profesiones
     if (req.query.categoria) {
-      filtro.categoria = new RegExp(req.query.categoria, 'i');
+      const profesionesCoincidentes = await Profesion.find({
+        nombre: new RegExp(req.query.categoria, 'i')
+      });
+      filtro.profesion = { $in: profesionesCoincidentes.map(p => p._id) };
     }
 
-    // Si el usuario envía ?busqueda=algo, buscamos coincidencias en nombre O categoria
+    // Si el usuario envía ?busqueda=algo, buscamos coincidencias en nombre O en la profesión
     if (req.query.busqueda) {
+      const profesionesPorBusqueda = await Profesion.find({
+        nombre: new RegExp(req.query.busqueda, 'i')
+      });
       filtro.$or = [
         { nombre: new RegExp(req.query.busqueda, 'i') },
-        { categoria: new RegExp(req.query.busqueda, 'i') }
+        { profesion: { $in: profesionesPorBusqueda.map(p => p._id) } }
       ];
     }
 
@@ -131,10 +138,16 @@ app.get('/api/expertos', async (req, res) => {
       filtro.ubicaciones = { $in: municipiosCoincidentes.map(m => m._id) };
     }
 
-    const expertos = await Experto.find(filtro).populate({
-      path: 'ubicaciones',
-      populate: { path: 'departamento' }
-    });
+    const expertos = await Experto.find(filtro)
+      .populate({
+        path: 'ubicaciones',
+        populate: { path: 'departamento' }
+      })
+      .populate({
+        path: 'profesion',
+        populate: { path: 'categoria' }
+      });
+
     res.status(200).json(expertos);
   } catch (error) {
     res.status(500).json({ mensaje: 'Error al buscar expertos', error: error.message });
@@ -143,10 +156,15 @@ app.get('/api/expertos', async (req, res) => {
 // Endpoint para obtener UN experto específico por su ID
 app.get('/api/expertos/:id', async (req, res) => {
   try {
-    const experto = await Experto.findById(req.params.id).populate({
-      path: 'ubicaciones',
-      populate: { path: 'departamento' }
-    });
+    const experto = await Experto.findById(req.params.id)
+      .populate({
+        path: 'ubicaciones',
+        populate: { path: 'departamento' }
+      })
+      .populate({
+        path: 'profesion',
+        populate: { path: 'categoria' }
+      });
 
     if (!experto) {
       return res.status(404).json({ mensaje: 'Experto no encontrado' });
@@ -203,7 +221,7 @@ app.delete('/api/expertos/:id', verificarToken, async (req, res) => {
 // Endpoint para generar el enlace de contacto por WhatsApp
 app.get('/api/expertos/:id/contacto', async (req, res) => {
   try {
-    const experto = await Experto.findById(req.params.id);
+    const experto = await Experto.findById(req.params.id).populate('profesion');
 
     if (!experto) {
       return res.status(404).json({ mensaje: 'Experto no encontrado' });
@@ -217,7 +235,7 @@ app.get('/api/expertos/:id/contacto', async (req, res) => {
       ? numeroLimpio
       : `57${numeroLimpio}`;
 
-    const mensaje = `Hola ${experto.nombre}, te contacto a través de EXPERTOS. Vi tu perfil de ${experto.categoria} y quisiera más información sobre tus servicios.`;
+    const mensaje = `Hola ${experto.nombre}, te contacto a través de EXPERTOS. Vi tu perfil de ${experto.profesion.nombre} y quisiera más información sobre tus servicios.`;
 
     const enlaceWhatsApp = `https://wa.me/${numeroConPais}?text=${encodeURIComponent(mensaje)}`;
 
