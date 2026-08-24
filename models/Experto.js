@@ -7,10 +7,12 @@ const expertoSchema = new mongoose.Schema({
     type: String,
     required: true
   },
-   profesion: {
+      profesion: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Profesion',
-    required: true
+    required: function () {
+      return this.rol !== 'admin';
+    }
   },
   descripcion: {
     type: String
@@ -31,10 +33,13 @@ const expertoSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
-    whatsapp: {
+        whatsapp: {
     type: String,
-    required: true,
-    unique: true
+    required: function () {
+      return this.rol !== 'admin';
+    },
+    unique: true,
+    sparse: true
   },
     tipoDocumento: {
     type: String,

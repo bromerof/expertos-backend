@@ -2,9 +2,26 @@
 
 const express = require('express');
 const router = express.Router();
+const bcrypt = require('bcryptjs');
 const Experto = require('../models/Experto');
 const verificarToken = require('../middleware/verificarToken');
 const verificarAdmin = require('../middleware/verificarAdmin');
+
+function normalizarTexto(texto) {
+  if (!texto) return texto;
+  return texto
+    .trim()
+    .toLowerCase()
+    .split(' ')
+    .filter(palabra => palabra !== '')
+    .map(palabra => palabra.charAt(0).toUpperCase() + palabra.slice(1))
+    .join(' ');
+}
+
+function correoValido(correo) {
+  const patron = /^[^\s@]+@[^\s@]+\.[a-zA-Z]{2,}$/;
+  return patron.test(correo);
+}
 
 // Listar perfiles pendientes de aprobación
 router.get('/expertos-pendientes', verificarToken, verificarAdmin, async (req, res) => {
@@ -55,6 +72,44 @@ router.put('/expertos/:id/suspender', verificarToken, verificarAdmin, async (req
     res.status(200).json({ mensaje: 'Perfil suspendido correctamente', experto });
   } catch (error) {
     res.status(400).json({ mensaje: 'Error al suspender el perfil', error: error.message });
+  }
+});
+
+// Crear un nuevo administrador (solo accesible por un admin ya logueado)
+router.post('/crear-admin', verificarToken, verificarAdmin, async (req, res) => {
+  try {
+    let { nombre, correo, contraseña, tipoDocumento, numeroDocumento } = req.body;
+
+    if (!nombre || !correo || !contraseña || !numeroDocumento) {
+      return res.status(400).json({ mensaje: 'Nombre, correo, contraseña y numero de documento son obligatorios' });
+    }
+
+    nombre = normalizarTexto(nombre);
+    correo = correo.trim().toLowerCase();
+
+    if (!correoValido(correo)) {
+      return res.status(400).json({ mensaje: 'El correo electronico no tiene un formato valido' });
+    }
+
+    const contraseñaHasheada = await bcrypt.hash(contraseña, 10);
+
+    const nuevoAdmin = new Experto({
+      nombre,
+      correo,
+      contraseña: contraseñaHasheada,
+      tipoDocumento: tipoDocumento || 'CC',
+      numeroDocumento: numeroDocumento.trim(),
+      rol: 'admin',
+      verificado: true
+    });
+
+    const adminGuardado = await nuevoAdmin.save();
+
+    const { contraseña: _, ...adminSinContraseña } = adminGuardado.toObject();
+
+    res.status(201).json(adminSinContraseña);
+  } catch (error) {
+    res.status(400).json({ mensaje: 'Error al crear el administrador', error: error.message });
   }
 });
 
