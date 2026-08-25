@@ -30,6 +30,7 @@ const Departamento = require('./models/Departamento');
 const Municipio = require('./models/Municipio');
 const Categoria = require('./models/Categoria');
 const Profesion = require('./models/Profesion');
+const { mensajeErrorDuplicado } = require('./utils/manejarErrores');
 
 // Middleware: permite que el servidor entienda JSON en las peticiones
 app.use(express.json());
@@ -196,7 +197,11 @@ app.put('/api/expertos/:id', verificarToken, async (req, res) => {
 
     res.status(200).json(expertoActualizado);
   } catch (error) {
-    res.status(400).json({ mensaje: 'Error al actualizar el experto', error: error.message });
+    const mensajeDuplicado = mensajeErrorDuplicado(error);
+    res.status(400).json({
+      mensaje: mensajeDuplicado || 'Error al actualizar el experto',
+      error: error.message
+    });
   }
 });
 

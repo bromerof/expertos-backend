@@ -6,6 +6,7 @@ const bcrypt = require('bcryptjs');
 const Experto = require('../models/Experto');
 const verificarToken = require('../middleware/verificarToken');
 const verificarAdmin = require('../middleware/verificarAdmin');
+const { mensajeErrorDuplicado } = require('../utils/manejarErrores');
 
 function normalizarTexto(texto) {
   if (!texto) return texto;
@@ -108,8 +109,12 @@ router.post('/crear-admin', verificarToken, verificarAdmin, async (req, res) => 
     const { contraseña: _, ...adminSinContraseña } = adminGuardado.toObject();
 
     res.status(201).json(adminSinContraseña);
-  } catch (error) {
-    res.status(400).json({ mensaje: 'Error al crear el administrador', error: error.message });
+   } catch (error) {
+    const mensajeDuplicado = mensajeErrorDuplicado(error);
+    res.status(400).json({
+      mensaje: mensajeDuplicado || 'Error al crear el administrador',
+      error: error.message
+    });
   }
 });
 

@@ -5,6 +5,7 @@ const router = express.Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const Experto = require('../models/Experto');
+const { mensajeErrorDuplicado } = require('../utils/manejarErrores');
 
 // Convierte un texto a formato "Primera Letra Mayúscula" en cada palabra
 function normalizarTexto(texto) {
@@ -60,7 +61,11 @@ router.post('/registro', async (req, res) => {
 
     res.status(201).json(expertoSinContraseña);
   } catch (error) {
-    res.status(400).json({ mensaje: 'Error al registrar el experto', error: error.message });
+    const mensajeDuplicado = mensajeErrorDuplicado(error);
+    res.status(400).json({
+      mensaje: mensajeDuplicado || 'Error al registrar el experto',
+      error: error.message
+    });
   }
 });
 
