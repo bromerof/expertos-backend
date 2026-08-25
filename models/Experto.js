@@ -37,9 +37,7 @@ const expertoSchema = new mongoose.Schema({
     type: String,
     required: function () {
       return this.rol !== 'admin';
-    },
-    unique: true,
-    sparse: true
+    }
   },
     tipoDocumento: {
     type: String,
@@ -48,8 +46,7 @@ const expertoSchema = new mongoose.Schema({
   },
   numeroDocumento: {
     type: String,
-    required: true,
-    unique: true
+    required: true
   },
     fotoDocumentoFrente: {
     type: String,
@@ -61,8 +58,7 @@ const expertoSchema = new mongoose.Schema({
   },
   correo: {
     type: String,
-    required: true,
-    unique: true
+    required: true
   },
   contraseña: {
     type: String,
@@ -97,6 +93,17 @@ const expertoSchema = new mongoose.Schema({
     default: Date.now
   }
 });
+
+// Indices combinados: una misma persona puede tener una cuenta de experto Y una
+// cuenta de cliente con el mismo correo, whatsapp o numeroDocumento (son cuentas
+// distintas). Lo que NO se permite es que DOS personas distintas registren el
+// mismo dato bajo el MISMO rol (ej. dos expertos con el mismo correo).
+expertoSchema.index({ correo: 1, rol: 1 }, { unique: true });
+expertoSchema.index(
+  { whatsapp: 1, rol: 1 },
+  { unique: true, partialFilterExpression: { whatsapp: { $exists: true } } }
+);
+expertoSchema.index({ numeroDocumento: 1, rol: 1 }, { unique: true });
 
 const Experto = mongoose.model('Experto', expertoSchema);
 

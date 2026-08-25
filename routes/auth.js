@@ -78,7 +78,7 @@ router.post('/registro', async (req, res) => {
 // Inicio de sesión
 router.post('/login', async (req, res) => {
   try {
-    const { correo, contraseña } = req.body;
+    const { correo, contraseña, rol } = req.body;
 
         const correoNormalizado = correo ? correo.trim().toLowerCase() : correo;
 
@@ -86,8 +86,18 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ mensaje: 'Correo y contraseña son obligatorios' });
     }
 
+    // Como ahora una misma persona puede tener 2 cuentas con el mismo correo
+    // (una de experto y una de cliente), si especifica el rol filtramos por
+    // ese rol para saber exactamente a cual cuenta quiere entrar. Si no lo
+    // especifica, buscamos cualquier cuenta con ese correo (funciona igual
+    // que antes para quien solo tiene una sola cuenta).
+    const filtro = { correo: correoNormalizado };
+    if (rol) {
+      filtro.rol = rol;
+    }
+
     // Como "contraseña" tiene select:false, la pedimos explícitamente con +contraseña
-        const experto = await Experto.findOne({ correo: correoNormalizado }).select('+contraseña');
+        const experto = await Experto.findOne(filtro).select('+contraseña');
 
     if (!experto) {
       return res.status(401).json({ mensaje: 'Credenciales incorrectas' });
