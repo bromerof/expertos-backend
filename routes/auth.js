@@ -1,4 +1,4 @@
-// routes/auth.js — Registro e inicio de sesión de expertos
+// routes/auth.js — Registro e inicio de sesión de expertos y clientes
 
 const express = require('express');
 const router = express.Router();
@@ -6,6 +6,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const Experto = require('../models/Experto');
 const { mensajeErrorDuplicado } = require('../utils/manejarErrores');
+const { contraseñaValida } = require('../utils/validaciones');
 
 // Convierte un texto a formato "Primera Letra Mayúscula" en cada palabra
 function normalizarTexto(texto) {
@@ -24,7 +25,7 @@ function correoValido(correo) {
   return patron.test(correo);
 }
 
-// Registro de un nuevo experto (con contraseña)
+// Registro de un nuevo experto o cliente (con contraseña)
 router.post('/registro', async (req, res) => {
   try {
     const { contraseña, ...restoDatos } = req.body;
@@ -46,6 +47,16 @@ router.post('/registro', async (req, res) => {
     if (!contraseña) {
       return res.status(400).json({ mensaje: 'La contraseña es obligatoria' });
     }
+
+    if (!contraseñaValida(contraseña)) {
+      return res.status(400).json({ mensaje: 'La contraseña debe tener minimo 6 caracteres' });
+    }
+
+    // Medida de seguridad: este endpoint es publico (sin necesidad de iniciar sesion),
+    // asi que NUNCA debe permitir crear una cuenta con rol "admin" mandando ese valor
+    // en el cuerpo de la peticion. Solo se acepta "experto" (valor por defecto) o
+    // "cliente"; cualquier otro valor recibido se ignora silenciosamente.
+    restoDatos.rol = restoDatos.rol === 'cliente' ? 'cliente' : 'experto';
 
     const contraseñaHasheada = await bcrypt.hash(contraseña, 10);
 
@@ -102,7 +113,7 @@ router.post('/login', async (req, res) => {
     res.status(200).json({
       mensaje: 'Inicio de sesión exitoso',
       token,
-      experto: { id: experto._id, nombre: experto.nombre, correo: experto.correo }
+      experto: { id: experto._id, nombre: experto.nombre, correo: experto.correo, rol: experto.rol }
     });
   } catch (error) {
     res.status(500).json({ mensaje: 'Error al iniciar sesión', error: error.message });

@@ -7,6 +7,7 @@ const Experto = require('../models/Experto');
 const verificarToken = require('../middleware/verificarToken');
 const verificarAdmin = require('../middleware/verificarAdmin');
 const { mensajeErrorDuplicado } = require('../utils/manejarErrores');
+const { contraseñaValida } = require('../utils/validaciones');
 
 function normalizarTexto(texto) {
   if (!texto) return texto;
@@ -84,7 +85,10 @@ router.post('/crear-admin', verificarToken, verificarAdmin, async (req, res) => 
     if (!nombre || !correo || !contraseña || !numeroDocumento) {
       return res.status(400).json({ mensaje: 'Nombre, correo, contraseña y numero de documento son obligatorios' });
     }
-
+    
+    if (!contraseñaValida(contraseña)) {
+      return res.status(400).json({ mensaje: 'La contraseña debe tener minimo 6 caracteres' });
+    }
     nombre = normalizarTexto(nombre);
     correo = correo.trim().toLowerCase();
 

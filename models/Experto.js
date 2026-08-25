@@ -7,13 +7,13 @@ const expertoSchema = new mongoose.Schema({
     type: String,
     required: true
   },
-      profesion: {
+        profesion: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Profesion',
     required: function () {
-      return this.rol !== 'admin';
+      return this.rol !== 'admin' && this.rol !== 'cliente';
     }
-  },
+  }, 
   descripcion: {
     type: String
   },
@@ -86,11 +86,12 @@ const expertoSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
-    rol: {
+       rol: {
     type: String,
-    enum: ['experto', 'admin'],
+    enum: ['experto', 'admin', 'cliente'],
     default: 'experto'
-  },
+  }, 
+  
   fechaCreacion: {
     type: Date,
     default: Date.now
