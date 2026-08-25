@@ -23,6 +23,7 @@ const Suscripcion = require('./models/Suscripcion');
 const authRoutes = require('./routes/auth');
 const verificarToken = require('./middleware/verificarToken');
 const adminRoutes = require('./routes/admin');
+const calificacionesRoutes = require('./routes/calificaciones');
 const multer = require('multer');
 const { storage } = require('./config/cloudinary');
 const upload = multer({ storage });
@@ -37,6 +38,7 @@ const { correoValido } = require('./utils/validaciones');
 app.use(express.json());
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/calificaciones', calificacionesRoutes);
 
 // Conexión a MongoDB
 mongoose.connect(process.env.MONGODB_URI)
