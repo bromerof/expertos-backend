@@ -31,6 +31,7 @@ const Municipio = require('./models/Municipio');
 const Categoria = require('./models/Categoria');
 const Profesion = require('./models/Profesion');
 const { mensajeErrorDuplicado } = require('./utils/manejarErrores');
+const { correoValido } = require('./utils/validaciones');
 
 // Middleware: permite que el servidor entienda JSON en las peticiones
 app.use(express.json());
@@ -182,9 +183,30 @@ app.put('/api/expertos/:id', verificarToken, async (req, res) => {
     if (req.usuario.id !== req.params.id) {
       return res.status(403).json({ mensaje: 'No tienes permiso para editar este perfil' });
     }
+
     if (req.body.nombre) {
       req.body.nombre = normalizarTexto(req.body.nombre);
     }
+
+    // El numero de documento no se puede cambiar despues del registro:
+    // ya fue revisado por un admin al aprobar el perfil, y permitir cambiarlo
+    // libremente anularia esa verificacion. Se ignora aunque llegue en la peticion.
+    delete req.body.numeroDocumento;
+
+    if (req.body.correo) {
+      req.body.correo = req.body.correo.trim().toLowerCase();
+      if (!correoValido(req.body.correo)) {
+        return res.status(400).json({ mensaje: 'El correo electronico no tiene un formato valido' });
+      }
+
+      // Si el correo realmente cambio respecto al que ya tenia guardado,
+      // el perfil vuelve a quedar pendiente de aprobacion por el admin.
+      const expertoActual = await Experto.findById(req.params.id);
+      if (expertoActual && expertoActual.correo !== req.body.correo) {
+        req.body.verificado = false;
+      }
+    }
+
     const expertoActualizado = await Experto.findByIdAndUpdate(
       req.params.id,
       req.body,

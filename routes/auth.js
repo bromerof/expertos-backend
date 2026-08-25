@@ -6,7 +6,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const Experto = require('../models/Experto');
 const { mensajeErrorDuplicado } = require('../utils/manejarErrores');
-const { contraseñaValida } = require('../utils/validaciones');
+const { contraseñaValida, correoValido } = require('../utils/validaciones');
 
 // Convierte un texto a formato "Primera Letra Mayúscula" en cada palabra
 function normalizarTexto(texto) {
@@ -18,11 +18,6 @@ function normalizarTexto(texto) {
     .filter(palabra => palabra !== '')
     .map(palabra => palabra.charAt(0).toUpperCase() + palabra.slice(1))
     .join(' ');
-}
-
-function correoValido(correo) {
-  const patron = /^[^\s@]+@[^\s@]+\.[a-zA-Z]{2,}$/;
-  return patron.test(correo);
 }
 
 // Registro de un nuevo experto o cliente (con contraseña)

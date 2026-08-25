@@ -83,17 +83,17 @@ router.post('/crear-admin', verificarToken, verificarAdmin, async (req, res) => 
     let { nombre, correo, contraseña, tipoDocumento, numeroDocumento } = req.body;
 
     if (!nombre || !correo || !contraseña || !numeroDocumento) {
-      return res.status(400).json({ mensaje: 'Nombre, correo, contraseña y numero de documento son obligatorios' });
+      return res.status(400).json({ mensaje: 'Nombre, correo, contraseña y número de documento son obligatorios' });
     }
-    
+
     if (!contraseñaValida(contraseña)) {
-      return res.status(400).json({ mensaje: 'La contraseña debe tener minimo 6 caracteres' });
+      return res.status(400).json({ mensaje: 'La contraseña debe tener mínimo 6 caracteres' });
     }
     nombre = normalizarTexto(nombre);
     correo = correo.trim().toLowerCase();
 
     if (!correoValido(correo)) {
-      return res.status(400).json({ mensaje: 'El correo electronico no tiene un formato valido' });
+      return res.status(400).json({ mensaje: 'El correo electrónico no tiene un formato valido' });
     }
 
     const contraseñaHasheada = await bcrypt.hash(contraseña, 10);
