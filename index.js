@@ -13,6 +13,7 @@ function normalizarTexto(texto) {
 }
 const express = require('express');
 const cors = require('cors');
+const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
 const Experto = require('./models/Experto');
 
@@ -264,7 +265,22 @@ app.get('/api/expertos/:id/contacto', async (req, res) => {
       ? numeroLimpio
       : `57${numeroLimpio}`;
 
-    const mensaje = `Hola ${experto.nombre}, te contacto a través de EXPERTOS. Vi tu perfil de ${experto.profesion.nombre} y quisiera más información sobre tus servicios.`;
+    let mensaje = `Hola ${experto.nombre}, te contacto a través de EXPERTOS. Vi tu perfil de ${experto.profesion.nombre} y quisiera más información sobre tus servicios.`;
+
+    // Si quien contacta esta logueado (mandó su token), le agregamos al mensaje
+    // un enlace para que el EXPERTO pueda calificar a ESE cliente especifico
+    // cuando termine el servicio.
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.split(' ')[1];
+      try {
+        const datosDecodificados = jwt.verify(token, process.env.JWT_SECRET);
+        const enlaceCalificar = `http://localhost:5173/calificar/${datosDecodificados.id}`;
+        mensaje += ` (Cuando terminemos, puedes calificarme aqui: ${enlaceCalificar})`;
+      } catch (error) {
+        // Token invalido o expirado: seguimos sin personalizar el mensaje, sin error
+      }
+    }
 
     const enlaceWhatsApp = `https://wa.me/${numeroConPais}?text=${encodeURIComponent(mensaje)}`;
 
