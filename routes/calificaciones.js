@@ -72,7 +72,8 @@ router.get('/buscar/:numero', verificarToken, async (req, res) => {
     const calificaciones = await Calificacion.find({ receptor: persona._id });
     const resumen = calcularResumen(calificaciones);
 
-    res.status(200).json({
+            res.status(200).json({
+      id: persona._id,
       nombre: persona.nombre,
       rol: persona.rol,
       promedio: resumen.promedio,
@@ -83,6 +84,8 @@ router.get('/buscar/:numero', verificarToken, async (req, res) => {
     res.status(500).json({ mensaje: 'Error al buscar la reputacion', error: error.message });
   }
 });
+
+// Obtener las calificaciones recibidas por alguien, con su promedio (PUBLICO,
 
 // Obtener las calificaciones recibidas por alguien, con su promedio (PUBLICO,
 // para poder mostrarlo en el perfil publico de un experto)
