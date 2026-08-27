@@ -23,6 +23,7 @@ const PORT = process.env.PORT || 3000;
 const Suscripcion = require('./models/Suscripcion');
 const authRoutes = require('./routes/auth');
 const verificarToken = require('./middleware/verificarToken');
+const verificarClienteAprobado = require('./middleware/verificarClienteAprobado');
 const adminRoutes = require('./routes/admin');
 const calificacionesRoutes = require('./routes/calificaciones');
 const multer = require('multer');
@@ -110,10 +111,11 @@ app.post('/api/expertos', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Servidor corriendo en http://localhost:${PORT}`);
 });
-// Endpoint para listar y buscar expertos
-app.get('/api/expertos', async (req, res) => {
+// Endpoint para listar y buscar expertos (PROTEGIDO: solo clientes aprobados)
+app.get('/api/expertos', verificarToken, verificarClienteAprobado, async (req, res) => {
   try {
-    const filtro = {};
+    // Solo deben aparecer EXPERTOS aprobados (nunca clientes ni admins)
+    const filtro = { verificado: true, rol: 'experto' };
 
     // Si el usuario envía ?categoria=Plomeria, buscamos las profesiones que coincidan
     // y filtramos los expertos que tengan alguna de esas profesiones
@@ -158,9 +160,14 @@ app.get('/api/expertos', async (req, res) => {
     res.status(500).json({ mensaje: 'Error al buscar expertos', error: error.message });
   }
 });
-// Endpoint para obtener UN experto específico por su ID
-app.get('/api/expertos/:id', async (req, res) => {
+// Endpoint para obtener UN experto o cliente especifico por su ID (PROTEGIDO)
+// Caso 1: ver tu propio perfil -> siempre permitido
+// Caso 2: ver el perfil de un EXPERTO -> exige ser cliente aprobado, y que ese experto este aprobado
+// Caso 3: ver el perfil de un CLIENTE -> exige ser experto aprobado (ej. pantalla de Calificar)
+app.get('/api/expertos/:id', verificarToken, async (req, res) => {
   try {
+    const esPerfilPropio = req.usuario.id === req.params.id;
+
     const experto = await Experto.findById(req.params.id)
       .populate({
         path: 'ubicaciones',
@@ -173,6 +180,30 @@ app.get('/api/expertos/:id', async (req, res) => {
 
     if (!experto) {
       return res.status(404).json({ mensaje: 'Experto no encontrado' });
+    }
+
+    if (!esPerfilPropio) {
+      const solicitante = await Experto.findById(req.usuario.id);
+
+      if (!solicitante) {
+        return res.status(401).json({ mensaje: 'Usuario no encontrado' });
+      }
+
+      if (experto.rol === 'experto') {
+        if (solicitante.rol !== 'cliente' || !solicitante.verificado) {
+          return res.status(403).json({ mensaje: 'Acceso denegado: esta accion es solo para clientes aprobados' });
+        }
+        if (!experto.verificado) {
+          return res.status(404).json({ mensaje: 'Experto no encontrado' });
+        }
+      } else if (experto.rol === 'cliente') {
+        if (solicitante.rol !== 'experto' || !solicitante.verificado) {
+          return res.status(403).json({ mensaje: 'Acceso denegado: esta accion es solo para expertos aprobados' });
+        }
+      } else {
+        // admin u otro caso: no hay ningun flujo legitimo para consultarlo asi
+        return res.status(403).json({ mensaje: 'Acceso denegado' });
+      }
     }
 
     res.status(200).json(experto);
@@ -248,12 +279,23 @@ app.delete('/api/expertos/:id', verificarToken, async (req, res) => {
     res.status(500).json({ mensaje: 'Error al eliminar el experto', error: error.message });
   }
 });
-// Endpoint para generar el enlace de contacto por WhatsApp
-app.get('/api/expertos/:id/contacto', async (req, res) => {
+// Endpoint para generar el enlace de contacto por WhatsApp (PROTEGIDO)
+// Solo un cliente aprobado puede contactar, y solo puede contactar a un EXPERTO aprobado
+// (nunca a otro cliente, ni a si mismo)
+app.get('/api/expertos/:id/contacto', verificarToken, async (req, res) => {
   try {
+    if (req.usuario.id === req.params.id) {
+      return res.status(400).json({ mensaje: 'No puedes contactarte a ti mismo' });
+    }
+
+    const solicitante = await Experto.findById(req.usuario.id);
+    if (!solicitante || solicitante.rol !== 'cliente' || !solicitante.verificado) {
+      return res.status(403).json({ mensaje: 'Esta accion es solo para clientes aprobados' });
+    }
+
     const experto = await Experto.findById(req.params.id).populate('profesion');
 
-    if (!experto) {
+    if (!experto || experto.rol !== 'experto' || !experto.verificado) {
       return res.status(404).json({ mensaje: 'Experto no encontrado' });
     }
 
@@ -265,22 +307,14 @@ app.get('/api/expertos/:id/contacto', async (req, res) => {
       ? numeroLimpio
       : `57${numeroLimpio}`;
 
-    let mensaje = `Hola ${experto.nombre}, te contacto a través de EXPERTOS. Vi tu perfil de ${experto.profesion.nombre} y quisiera más información sobre tus servicios.`;
+    let mensaje = `Hola ${experto.nombre}, te contacto a través de EXPERTOS. Vi tu perfil de ${experto.profesion.nombre} y quisiera más información sobre tus servicios. Recuerda que puedes verificar mi información como cliente en la plataforma EXPERTOS.`;
 
-    // Si quien contacta esta logueado (mandó su token), le agregamos al mensaje
-    // un enlace para que el EXPERTO pueda calificar a ESE cliente especifico
-    // cuando termine el servicio.
-    const authHeader = req.headers.authorization;
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      const token = authHeader.split(' ')[1];
-      try {
-        const datosDecodificados = jwt.verify(token, process.env.JWT_SECRET);
-        const enlaceCalificar = `http://localhost:5173/calificar/${datosDecodificados.id}`;
-        mensaje += ` (Cuando terminemos, puedes calificarme aqui: ${enlaceCalificar})`;
-      } catch (error) {
-        // Token invalido o expirado: seguimos sin personalizar el mensaje, sin error
-      }
-    }
+    // FRONTEND_URL: variable de entorno nueva.
+    // En local usa el valor por defecto (localhost:5173); en produccion debe
+    // apuntar a https://www.expertosymas.com
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const enlaceCalificar = `${frontendUrl}/calificar/${req.usuario.id}`;
+    mensaje += ` (Cuando terminemos, puedes calificarme aqui: ${enlaceCalificar})`;
 
     const enlaceWhatsApp = `https://wa.me/${numeroConPais}?text=${encodeURIComponent(mensaje)}`;
 
