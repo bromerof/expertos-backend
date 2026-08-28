@@ -17,6 +17,42 @@ const expertoSchema = new mongoose.Schema({
   descripcion: {
     type: String
   },
+  otraCategoriaTexto: {
+    type: String,
+    default: ''
+  },
+  otraProfesionTexto: {
+    type: String,
+    default: ''
+  },
+  terminosAceptados: {
+    type: Boolean,
+    default: false
+  },
+  terminosFecha: {
+    type: Date
+  },
+  datosAceptados: {
+    type: Boolean,
+    default: false
+  },
+  datosFecha: {
+    type: Date
+  },
+  reglasAceptadas: {
+    type: Boolean,
+    default: false
+  },
+  reglasFecha: {
+    type: Date
+  },
+  comunicacionesAceptadas: {
+    type: Boolean,
+    default: false
+  },
+  comunicacionesFecha: {
+    type: Date
+  },
     ubicaciones: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Municipio'

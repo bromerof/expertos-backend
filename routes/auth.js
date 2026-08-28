@@ -5,6 +5,7 @@ const router = express.Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const Experto = require('../models/Experto');
+const Profesion = require('../models/Profesion');
 const { mensajeErrorDuplicado } = require('../utils/manejarErrores');
 const { contraseñaValida, correoValido } = require('../utils/validaciones');
 
@@ -52,6 +53,45 @@ router.post('/registro', async (req, res) => {
     // en el cuerpo de la peticion. Solo se acepta "experto" (valor por defecto) o
     // "cliente"; cualquier otro valor recibido se ignora silenciosamente.
     restoDatos.rol = restoDatos.rol === 'cliente' ? 'cliente' : 'experto';
+
+    // Validacion obligatoria de aceptacion legal (no basta con la validacion
+    // del frontend, porque este endpoint podria llamarse directamente)
+    if (!restoDatos.terminosAceptados || !restoDatos.datosAceptados) {
+      return res.status(400).json({ mensaje: 'Debes aceptar los Terminos de Uso y la Politica de Tratamiento de Datos Personales' });
+    }
+    if (restoDatos.rol === 'experto' && !restoDatos.reglasAceptadas) {
+      return res.status(400).json({ mensaje: 'Debes aceptar las Reglas para Expertos' });
+    }
+
+    // Guardamos la fecha exacta de cada aceptacion, como prueba de consentimiento
+    const ahora = new Date();
+    restoDatos.terminosFecha = ahora;
+    restoDatos.datosFecha = ahora;
+    if (restoDatos.reglasAceptadas) {
+      restoDatos.reglasFecha = ahora;
+    }
+    if (restoDatos.comunicacionesAceptadas) {
+      restoDatos.comunicacionesFecha = ahora;
+    }
+
+    // Si eligio categoria "Otra" y/o profesion "Otra", exigimos que describa
+    // cada una por separado; si no, el cliente nunca podria encontrarlo
+    // buscando lo que realmente hace.
+    if (restoDatos.rol === 'experto' && restoDatos.profesion) {
+      const profesionElegida = await Profesion.findById(restoDatos.profesion).populate('categoria');
+      if (profesionElegida) {
+        const categoriaEsOtra = profesionElegida.categoria &&
+          profesionElegida.categoria.nombre.trim().toLowerCase() === 'otra';
+        const profesionEsOtra = profesionElegida.nombre.trim().toLowerCase() === 'otra';
+
+        if (categoriaEsOtra && (!restoDatos.otraCategoriaTexto || !restoDatos.otraCategoriaTexto.trim())) {
+          return res.status(400).json({ mensaje: 'Debes indicar cual es tu categoria especifica' });
+        }
+        if (profesionEsOtra && (!restoDatos.otraProfesionTexto || !restoDatos.otraProfesionTexto.trim())) {
+          return res.status(400).json({ mensaje: 'Debes indicar cual es tu profesion especifica' });
+        }
+      }
+    }
 
     const contraseñaHasheada = await bcrypt.hash(contraseña, 10);
 

@@ -49,7 +49,7 @@ router.post('/', verificarToken, async (req, res) => {
     const calificacion = await Calificacion.findOneAndUpdate(
       { autor: autorId, receptor: receptorId },
       { puntuacion, comentario: comentario || '', fechaCreacion: new Date() },
-      { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true }
+      { upsert: true, returnDocument: 'after', runValidators: true, setDefaultsOnInsert: true }
     );
 
     res.status(201).json(calificacion);
@@ -84,8 +84,6 @@ router.get('/buscar/:numero', verificarToken, async (req, res) => {
     res.status(500).json({ mensaje: 'Error al buscar la reputacion', error: error.message });
   }
 });
-
-// Obtener las calificaciones recibidas por alguien, con su promedio (PUBLICO,
 
 // Obtener las calificaciones recibidas por alguien, con su promedio (PUBLICO,
 // para poder mostrarlo en el perfil publico de un experto)

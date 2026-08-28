@@ -11,6 +11,16 @@ function normalizarTexto(texto) {
     .map(palabra => palabra.charAt(0).toUpperCase() + palabra.slice(1))
     .join(' ');
 }
+// Quita tildes/diacriticos y pasa a minusculas. Se usa SOLO para comparar
+// texto en busquedas (nunca para guardar datos), asi "fotografo" tambien
+// encuentra "Fotógrafo" sin importar si el usuario escribio la tilde o no.
+function quitarTildes(texto) {
+  if (!texto) return '';
+  return texto
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
 const express = require('express');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
@@ -117,32 +127,56 @@ app.get('/api/expertos', verificarToken, verificarClienteAprobado, async (req, r
     // Solo deben aparecer EXPERTOS aprobados (nunca clientes ni admins)
     const filtro = { verificado: true, rol: 'experto' };
 
-    // Si el usuario envía ?categoria=Plomeria, buscamos las profesiones que coincidan
-    // y filtramos los expertos que tengan alguna de esas profesiones
+    // Busqueda por categoria/profesion (parametro categoria), sin tildes
     if (req.query.categoria) {
-      const profesionesCoincidentes = await Profesion.find({
-        nombre: new RegExp(req.query.categoria, 'i')
-      });
+      const termino = quitarTildes(req.query.categoria);
+      const todasLasProfesiones = await Profesion.find();
+      const profesionesCoincidentes = todasLasProfesiones.filter(p =>
+        quitarTildes(p.nombre).includes(termino)
+      );
       filtro.profesion = { $in: profesionesCoincidentes.map(p => p._id) };
     }
 
-    // Si el usuario envía ?busqueda=algo, buscamos coincidencias en nombre O en la profesión
+    // Busqueda libre por nombre del experto O por su profesion (parametro busqueda), sin tildes
     if (req.query.busqueda) {
-      const profesionesPorBusqueda = await Profesion.find({
-        nombre: new RegExp(req.query.busqueda, 'i')
-      });
+      const termino = quitarTildes(req.query.busqueda);
+
+      const todasLasProfesiones = await Profesion.find();
+      const profesionesPorBusqueda = todasLasProfesiones.filter(p =>
+        quitarTildes(p.nombre).includes(termino)
+      );
+
+      // Para el nombre del experto y sus textos de "Otra" tambien comparamos
+      // sin tildes: traemos los candidatos ya filtrados por rol/verificado y
+      // comparamos en memoria
+      const candidatos = await Experto.find(filtro).select('_id nombre otraCategoriaTexto otraProfesionTexto');
+      const idsPorNombre = candidatos
+        .filter(c =>
+          quitarTildes(c.nombre).includes(termino) ||
+          quitarTildes(c.otraCategoriaTexto).includes(termino) ||
+          quitarTildes(c.otraProfesionTexto).includes(termino)
+        )
+        .map(c => c._id);
+
       filtro.$or = [
-        { nombre: new RegExp(req.query.busqueda, 'i') },
+        { _id: { $in: idsPorNombre } },
         { profesion: { $in: profesionesPorBusqueda.map(p => p._id) } }
       ];
     }
 
-    // Si el usuario envía ?ubicacion=Medellin, buscamos el municipio y filtramos por su ID
+    // Filtro por ciudad especifica (parametro ubicacion), sin tildes
     if (req.query.ubicacion) {
-      const municipiosCoincidentes = await Municipio.find({
-        nombre: new RegExp(req.query.ubicacion, 'i')
-      });
+      const termino = quitarTildes(req.query.ubicacion);
+      const todosLosMunicipios = await Municipio.find();
+      const municipiosCoincidentes = todosLosMunicipios.filter(m =>
+        quitarTildes(m.nombre).includes(termino)
+      );
       filtro.ubicaciones = { $in: municipiosCoincidentes.map(m => m._id) };
+    } else if (req.query.departamento) {
+      // Filtro por Departamento completo, sin elegir una ciudad especifica:
+      // buscamos todos los municipios que pertenecen a ese departamento
+      const municipiosDelDepartamento = await Municipio.find({ departamento: req.query.departamento });
+      filtro.ubicaciones = { $in: municipiosDelDepartamento.map(m => m._id) };
     }
 
     const expertos = await Experto.find(filtro)
@@ -227,6 +261,24 @@ app.put('/api/expertos/:id', verificarToken, async (req, res) => {
     // libremente anularia esa verificacion. Se ignora aunque llegue en la peticion.
     delete req.body.numeroDocumento;
 
+    // Si esta cambiando (o confirmando) su categoria/profesion y alguna es
+    // "Otra", exigimos que describa cada una por separado, igual que en el registro.
+    if (req.body.profesion) {
+      const profesionElegida = await Profesion.findById(req.body.profesion).populate('categoria');
+      if (profesionElegida) {
+        const categoriaEsOtra = profesionElegida.categoria &&
+          profesionElegida.categoria.nombre.trim().toLowerCase() === 'otra';
+        const profesionEsOtra = profesionElegida.nombre.trim().toLowerCase() === 'otra';
+
+        if (categoriaEsOtra && (!req.body.otraCategoriaTexto || !req.body.otraCategoriaTexto.trim())) {
+          return res.status(400).json({ mensaje: 'Debes indicar cual es tu categoria especifica' });
+        }
+        if (profesionEsOtra && (!req.body.otraProfesionTexto || !req.body.otraProfesionTexto.trim())) {
+          return res.status(400).json({ mensaje: 'Debes indicar cual es tu profesion especifica' });
+        }
+      }
+    }
+
     if (req.body.correo) {
       req.body.correo = req.body.correo.trim().toLowerCase();
       if (!correoValido(req.body.correo)) {
@@ -307,7 +359,14 @@ app.get('/api/expertos/:id/contacto', verificarToken, async (req, res) => {
       ? numeroLimpio
       : `57${numeroLimpio}`;
 
-    let mensaje = `Hola ${experto.nombre}, te contacto a través de EXPERTOS. Vi tu perfil de ${experto.profesion.nombre} y quisiera más información sobre tus servicios. Recuerda que puedes verificar mi información como cliente en la plataforma EXPERTOS.`;
+    // Si la profesion es "Otra", usamos la especialidad especifica que el
+    // experto describio; si no, usamos el nombre normal de la profesion.
+    const esOtra = experto.profesion.nombre.trim().toLowerCase() === 'otra';
+    const nombreServicio = esOtra && experto.otraProfesionTexto
+      ? experto.otraProfesionTexto
+      : experto.profesion.nombre;
+
+    let mensaje = `Hola ${experto.nombre}, te contacto a través de EXPERTOS. Vi tu perfil de ${nombreServicio} y quisiera más información sobre tus servicios. Recuerda que puedes verificar mi información como cliente en la plataforma EXPERTOS.`;
 
     // FRONTEND_URL: variable de entorno nueva.
     // En local usa el valor por defecto (localhost:5173); en produccion debe
