@@ -189,6 +189,10 @@ app.get('/api/expertos', verificarToken, verificarClienteAprobado, async (req, r
         populate: { path: 'categoria' }
       });
 
+    // Los expertos con plan Pro aparecen primero. El orden entre expertos
+    // del mismo plan se mantiene igual (sort es estable en Node).
+    expertos.sort((a, b) => (b.plan === 'pro') - (a.plan === 'pro'));
+
     res.status(200).json(expertos);
   } catch (error) {
     res.status(500).json({ mensaje: 'Error al buscar expertos', error: error.message });
