@@ -137,6 +137,11 @@ app.get('/api/expertos', verificarToken, verificarClienteAprobado, async (req, r
       filtro.profesion = { $in: profesionesCoincidentes.map(p => p._id) };
     }
 
+    // Vamos acumulando aqui cada condicion "O" por separado (busqueda de texto,
+    // ubicacion), para poder combinarlas todas juntas con $and al final sin que
+    // una sobrescriba a la otra
+    const condicionesAnd = [];
+
     // Busqueda libre por nombre del experto O por su profesion (parametro busqueda), sin tildes
     if (req.query.busqueda) {
       const termino = quitarTildes(req.query.busqueda);
@@ -158,25 +163,44 @@ app.get('/api/expertos', verificarToken, verificarClienteAprobado, async (req, r
         )
         .map(c => c._id);
 
-      filtro.$or = [
-        { _id: { $in: idsPorNombre } },
-        { profesion: { $in: profesionesPorBusqueda.map(p => p._id) } }
-      ];
+      condicionesAnd.push({
+        $or: [
+          { _id: { $in: idsPorNombre } },
+          { profesion: { $in: profesionesPorBusqueda.map(p => p._id) } }
+        ]
+      });
     }
 
-    // Filtro por ciudad especifica (parametro ubicacion), sin tildes
+    // Filtro por ciudad especifica (parametro ubicacion), sin tildes.
+    // Ademas de coincidir por ciudad fisica, tambien incluimos a expertos con
+    // cobertura virtual nacional, sin importar en que ciudad esten ubicados.
     if (req.query.ubicacion) {
       const termino = quitarTildes(req.query.ubicacion);
       const todosLosMunicipios = await Municipio.find();
       const municipiosCoincidentes = todosLosMunicipios.filter(m =>
         quitarTildes(m.nombre).includes(termino)
       );
-      filtro.ubicaciones = { $in: municipiosCoincidentes.map(m => m._id) };
+      condicionesAnd.push({
+        $or: [
+          { ubicaciones: { $in: municipiosCoincidentes.map(m => m._id) } },
+          { coberturaVirtualNacional: true }
+        ]
+      });
     } else if (req.query.departamento) {
       // Filtro por Departamento completo, sin elegir una ciudad especifica:
-      // buscamos todos los municipios que pertenecen a ese departamento
+      // buscamos todos los municipios que pertenecen a ese departamento,
+      // y de igual forma incluimos a los expertos con cobertura nacional.
       const municipiosDelDepartamento = await Municipio.find({ departamento: req.query.departamento });
-      filtro.ubicaciones = { $in: municipiosDelDepartamento.map(m => m._id) };
+      condicionesAnd.push({
+        $or: [
+          { ubicaciones: { $in: municipiosDelDepartamento.map(m => m._id) } },
+          { coberturaVirtualNacional: true }
+        ]
+      });
+    }
+
+    if (condicionesAnd.length > 0) {
+      filtro.$and = condicionesAnd;
     }
 
     const expertos = await Experto.find(filtro)
