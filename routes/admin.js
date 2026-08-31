@@ -122,4 +122,55 @@ router.post('/crear-admin', verificarToken, verificarAdmin, async (req, res) => 
   }
 });
 
+// Listar TODOS los expertos (no solo pendientes), para poder probar el plan Pro
+// manualmente en cualquier cuenta mientras Wompi no esta conectado
+router.get('/expertos-todos', verificarToken, verificarAdmin, async (req, res) => {
+  try {
+    const expertos = await Experto.find({ rol: 'experto' })
+      .sort({ nombre: 1 })
+      .select('nombre correo plan verificado');
+    res.status(200).json(expertos);
+  } catch (error) {
+    res.status(500).json({ mensaje: 'Error al obtener expertos', error: error.message });
+  }
+});
+
+// Activar el plan Pro manualmente (prueba, sin pago real via Wompi todavia)
+router.put('/expertos/:id/activar-pro', verificarToken, verificarAdmin, async (req, res) => {
+  try {
+    const experto = await Experto.findByIdAndUpdate(
+      req.params.id,
+      { plan: 'pro' },
+      { returnDocument: 'after' }
+    );
+
+    if (!experto) {
+      return res.status(404).json({ mensaje: 'Experto no encontrado' });
+    }
+
+    res.status(200).json({ mensaje: 'Plan Pro activado (prueba)', experto });
+  } catch (error) {
+    res.status(400).json({ mensaje: 'Error al activar el plan Pro', error: error.message });
+  }
+});
+
+// Quitar el plan Pro manualmente (volver a gratuito)
+router.put('/expertos/:id/quitar-pro', verificarToken, verificarAdmin, async (req, res) => {
+  try {
+    const experto = await Experto.findByIdAndUpdate(
+      req.params.id,
+      { plan: 'gratuito' },
+      { returnDocument: 'after' }
+    );
+
+    if (!experto) {
+      return res.status(404).json({ mensaje: 'Experto no encontrado' });
+    }
+
+    res.status(200).json({ mensaje: 'Plan Pro desactivado', experto });
+  } catch (error) {
+    res.status(400).json({ mensaje: 'Error al quitar el plan Pro', error: error.message });
+  }
+});
+
 module.exports = router;

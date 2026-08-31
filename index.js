@@ -34,6 +34,7 @@ const Suscripcion = require('./models/Suscripcion');
 const authRoutes = require('./routes/auth');
 const verificarToken = require('./middleware/verificarToken');
 const verificarClienteAprobado = require('./middleware/verificarClienteAprobado');
+const verificarAdmin = require('./middleware/verificarAdmin');
 const adminRoutes = require('./routes/admin');
 const calificacionesRoutes = require('./routes/calificaciones');
 const multer = require('multer');
@@ -410,8 +411,8 @@ app.get('/api/expertos/:id/contacto', verificarToken, async (req, res) => {
     res.status(500).json({ mensaje: 'Error al generar el enlace de contacto', error: error.message });
   }
 });
-// Endpoint para activar (simular) la suscripción de un experto
-app.post('/api/expertos/:id/suscripcion', async (req, res) => {
+// Endpoint para activar (simular) la suscripción de un experto (PROTEGIDO: solo admin)
+app.post('/api/expertos/:id/suscripcion', verificarToken, verificarAdmin, async (req, res) => {
   try {
     const experto = await Experto.findById(req.params.id);
 
