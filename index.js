@@ -37,6 +37,7 @@ const verificarClienteAprobado = require('./middleware/verificarClienteAprobado'
 const verificarAdmin = require('./middleware/verificarAdmin');
 const adminRoutes = require('./routes/admin');
 const calificacionesRoutes = require('./routes/calificaciones');
+const necesidadesRoutes = require('./routes/necesidades');
 const multer = require('multer');
 const { storage } = require('./config/cloudinary');
 const upload = multer({ storage });
@@ -52,6 +53,7 @@ app.use(express.json());
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/calificaciones', calificacionesRoutes);
+app.use('/api/necesidades', necesidadesRoutes);
 
 // Conexión a MongoDB
 mongoose.connect(process.env.MONGODB_URI)
