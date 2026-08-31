@@ -102,7 +102,7 @@ app.get('/api/profesiones', async (req, res) => {
       filtro.categoria = req.query.categoria;
     }
 
-    const profesiones = await Profesion.find(filtro).sort({ nombre: 1 });
+    const profesiones = await Profesion.find(filtro).sort({ nombre: 1 }).populate('categoria');
     res.status(200).json(profesiones);
   } catch (error) {
     res.status(500).json({ mensaje: 'Error al obtener profesiones', error: error.message });
