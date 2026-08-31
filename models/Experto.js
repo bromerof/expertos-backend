@@ -14,6 +14,10 @@ const expertoSchema = new mongoose.Schema({
       return this.rol !== 'admin' && this.rol !== 'cliente';
     }
   }, 
+  profesionesAdicionales: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Profesion'
+  }],
   descripcion: {
     type: String
   },

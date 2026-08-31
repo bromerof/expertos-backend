@@ -128,20 +128,26 @@ app.get('/api/expertos', verificarToken, verificarClienteAprobado, async (req, r
     // Solo deben aparecer EXPERTOS aprobados (nunca clientes ni admins)
     const filtro = { verificado: true, rol: 'experto' };
 
-    // Busqueda por categoria/profesion (parametro categoria), sin tildes
+    // Vamos acumulando aqui cada condicion "O" por separado (categoria,
+    // busqueda de texto, ubicacion), para poder combinarlas todas juntas con
+    // $and al final sin que una sobrescriba a la otra
+    const condicionesAnd = [];
+
+    // Busqueda por categoria/profesion (parametro categoria), sin tildes.
+    // Revisa tanto la profesion principal como las profesiones adicionales (Pro).
     if (req.query.categoria) {
       const termino = quitarTildes(req.query.categoria);
       const todasLasProfesiones = await Profesion.find();
-      const profesionesCoincidentes = todasLasProfesiones.filter(p =>
-        quitarTildes(p.nombre).includes(termino)
-      );
-      filtro.profesion = { $in: profesionesCoincidentes.map(p => p._id) };
+      const idsCoincidentes = todasLasProfesiones
+        .filter(p => quitarTildes(p.nombre).includes(termino))
+        .map(p => p._id);
+      condicionesAnd.push({
+        $or: [
+          { profesion: { $in: idsCoincidentes } },
+          { profesionesAdicionales: { $in: idsCoincidentes } }
+        ]
+      });
     }
-
-    // Vamos acumulando aqui cada condicion "O" por separado (busqueda de texto,
-    // ubicacion), para poder combinarlas todas juntas con $and al final sin que
-    // una sobrescriba a la otra
-    const condicionesAnd = [];
 
     // Busqueda libre por nombre del experto O por su profesion (parametro busqueda), sin tildes
     if (req.query.busqueda) {
@@ -167,7 +173,8 @@ app.get('/api/expertos', verificarToken, verificarClienteAprobado, async (req, r
       condicionesAnd.push({
         $or: [
           { _id: { $in: idsPorNombre } },
-          { profesion: { $in: profesionesPorBusqueda.map(p => p._id) } }
+          { profesion: { $in: profesionesPorBusqueda.map(p => p._id) } },
+          { profesionesAdicionales: { $in: profesionesPorBusqueda.map(p => p._id) } }
         ]
       });
     }
@@ -212,6 +219,10 @@ app.get('/api/expertos', verificarToken, verificarClienteAprobado, async (req, r
       .populate({
         path: 'profesion',
         populate: { path: 'categoria' }
+      })
+      .populate({
+        path: 'profesionesAdicionales',
+        populate: { path: 'categoria' }
       });
 
     // Los expertos con plan Pro aparecen primero. El orden entre expertos
@@ -238,6 +249,10 @@ app.get('/api/expertos/:id', verificarToken, async (req, res) => {
       })
       .populate({
         path: 'profesion',
+        populate: { path: 'categoria' }
+      })
+      .populate({
+        path: 'profesionesAdicionales',
         populate: { path: 'categoria' }
       });
 
@@ -290,21 +305,35 @@ app.put('/api/expertos/:id', verificarToken, async (req, res) => {
     // libremente anularia esa verificacion. Se ignora aunque llegue en la peticion.
     delete req.body.numeroDocumento;
 
+    // profesionesAdicionales solo aplica para cuentas con plan Pro. Si llega
+    // en la peticion pero la cuenta no es Pro, la ignoramos silenciosamente
+    // (no rompe el guardado, solo no aplica el cambio).
+    if (req.body.profesionesAdicionales) {
+      const expertoParaPlan = await Experto.findById(req.params.id).select('plan');
+      if (!expertoParaPlan || expertoParaPlan.plan !== 'pro') {
+        delete req.body.profesionesAdicionales;
+      }
+    }
+
     // Si esta cambiando (o confirmando) su categoria/profesion y alguna es
     // "Otra", exigimos que describa cada una por separado, igual que en el registro.
+    // Revisamos tanto la profesion principal como las profesiones adicionales (Pro).
     if (req.body.profesion) {
-      const profesionElegida = await Profesion.findById(req.body.profesion).populate('categoria');
-      if (profesionElegida) {
-        const categoriaEsOtra = profesionElegida.categoria &&
-          profesionElegida.categoria.nombre.trim().toLowerCase() === 'otra';
-        const profesionEsOtra = profesionElegida.nombre.trim().toLowerCase() === 'otra';
+      const idsARevisar = [req.body.profesion, ...(req.body.profesionesAdicionales || [])];
+      const profesionesElegidas = await Profesion.find({ _id: { $in: idsARevisar } }).populate('categoria');
 
-        if (categoriaEsOtra && (!req.body.otraCategoriaTexto || !req.body.otraCategoriaTexto.trim())) {
-          return res.status(400).json({ mensaje: 'Debes indicar cual es tu categoria especifica' });
-        }
-        if (profesionEsOtra && (!req.body.otraProfesionTexto || !req.body.otraProfesionTexto.trim())) {
-          return res.status(400).json({ mensaje: 'Debes indicar cual es tu profesion especifica' });
-        }
+      const categoriaEsOtra = profesionesElegidas.some(p =>
+        p.categoria && p.categoria.nombre.trim().toLowerCase() === 'otra'
+      );
+      const profesionEsOtra = profesionesElegidas.some(p =>
+        p.nombre.trim().toLowerCase() === 'otra'
+      );
+
+      if (categoriaEsOtra && (!req.body.otraCategoriaTexto || !req.body.otraCategoriaTexto.trim())) {
+        return res.status(400).json({ mensaje: 'Debes indicar cual es tu categoria especifica' });
+      }
+      if (profesionEsOtra && (!req.body.otraProfesionTexto || !req.body.otraProfesionTexto.trim())) {
+        return res.status(400).json({ mensaje: 'Debes indicar cual es tu profesion especifica' });
       }
     }
 
