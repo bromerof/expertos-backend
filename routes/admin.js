@@ -4,6 +4,9 @@ const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
 const Experto = require('../models/Experto');
+const Calificacion = require('../models/Calificacion');
+const Necesidad = require('../models/Necesidad');
+const Aporte = require('../models/Aporte');
 const verificarToken = require('../middleware/verificarToken');
 const verificarAdmin = require('../middleware/verificarAdmin');
 const { mensajeErrorDuplicado } = require('../utils/manejarErrores');
@@ -170,6 +173,50 @@ router.put('/expertos/:id/quitar-pro', verificarToken, verificarAdmin, async (re
     res.status(200).json({ mensaje: 'Plan Pro desactivado', experto });
   } catch (error) {
     res.status(400).json({ mensaje: 'Error al quitar el plan Pro', error: error.message });
+  }
+});
+
+// Estadisticas generales de la plataforma (solo admin)
+router.get('/estadisticas', verificarToken, verificarAdmin, async (req, res) => {
+  try {
+    const [
+      totalExpertos,
+      expertosAprobados,
+      expertosPendientes,
+      expertosPro,
+      totalClientes,
+      clientesAprobados,
+      totalCalificaciones,
+      totalNecesidades,
+      necesidadesAbiertas,
+      totalAportesAprobados
+    ] = await Promise.all([
+      Experto.countDocuments({ rol: 'experto' }),
+      Experto.countDocuments({ rol: 'experto', verificado: true }),
+      Experto.countDocuments({ rol: 'experto', verificado: false }),
+      Experto.countDocuments({ rol: 'experto', plan: 'pro' }),
+      Experto.countDocuments({ rol: 'cliente' }),
+      Experto.countDocuments({ rol: 'cliente', verificado: true }),
+      Calificacion.countDocuments(),
+      Necesidad.countDocuments(),
+      Necesidad.countDocuments({ estado: 'abierta' }),
+      Aporte.countDocuments({ estado: 'aprobada' })
+    ]);
+
+    res.status(200).json({
+      totalExpertos,
+      expertosAprobados,
+      expertosPendientes,
+      expertosPro,
+      totalClientes,
+      clientesAprobados,
+      totalCalificaciones,
+      totalNecesidades,
+      necesidadesAbiertas,
+      totalAportesAprobados
+    });
+  } catch (error) {
+    res.status(500).json({ mensaje: 'Error al obtener las estadisticas', error: error.message });
   }
 });
 

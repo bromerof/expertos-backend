@@ -118,6 +118,37 @@ const expertoSchema = new mongoose.Schema({
     enum: ['gratuito', 'pro'],
     default: 'gratuito'
   },
+  suscripcionEstado: {
+    type: String,
+    enum: ['ninguna', 'mes_gratis', 'activa', 'pago_fallido', 'cancelada'],
+    default: 'ninguna'
+  },
+  suscripcionFuentePagoId: {
+    type: String,
+    default: ''
+  },
+  suscripcionFechaInicio: {
+    type: Date
+  },
+  suscripcionProximoCobro: {
+    type: Date
+  },
+  suscripcionIntentosFallidos: {
+    type: Number,
+    default: 0
+  },
+  vistasPerfil: {
+    type: Number,
+    default: 0
+  },
+  aparicionesBusqueda: {
+    type: Number,
+    default: 0
+  },
+  contactosRecibidos: {
+    type: Number,
+    default: 0
+  },
   verificado: {
     type: Boolean,
     default: false

@@ -38,6 +38,7 @@ const verificarAdmin = require('./middleware/verificarAdmin');
 const adminRoutes = require('./routes/admin');
 const calificacionesRoutes = require('./routes/calificaciones');
 const necesidadesRoutes = require('./routes/necesidades');
+const pagosRoutes = require('./routes/pagos');
 const multer = require('multer');
 const { storage } = require('./config/cloudinary');
 const upload = multer({ storage });
@@ -54,6 +55,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/calificaciones', calificacionesRoutes);
 app.use('/api/necesidades', necesidadesRoutes);
+app.use('/api/pagos', pagosRoutes);
 
 // Conexión a MongoDB
 mongoose.connect(process.env.MONGODB_URI)
@@ -231,6 +233,15 @@ app.get('/api/expertos', verificarToken, verificarClienteAprobado, async (req, r
     // del mismo plan se mantiene igual (sort es estable en Node).
     expertos.sort((a, b) => (b.plan === 'pro') - (a.plan === 'pro'));
 
+    // Registramos una aparicion en busqueda para cada experto mostrado
+    // (estadistica exclusiva del plan Pro, no bloquea la respuesta)
+    if (expertos.length > 0) {
+      Experto.updateMany(
+        { _id: { $in: expertos.map(e => e._id) } },
+        { $inc: { aparicionesBusqueda: 1 } }
+      ).catch(err => console.error('Error al registrar apariciones en busqueda:', err));
+    }
+
     res.status(200).json(expertos);
   } catch (error) {
     res.status(500).json({ mensaje: 'Error al buscar expertos', error: error.message });
@@ -276,6 +287,9 @@ app.get('/api/expertos/:id', verificarToken, async (req, res) => {
         if (!experto.verificado) {
           return res.status(404).json({ mensaje: 'Experto no encontrado' });
         }
+        // Registramos la vista (estadistica), sin bloquear la respuesta
+        Experto.findByIdAndUpdate(experto._id, { $inc: { vistasPerfil: 1 } })
+          .catch(err => console.error('Error al registrar vista de perfil:', err));
       } else if (experto.rol === 'cliente') {
         if (solicitante.rol !== 'experto' || !solicitante.verificado) {
           return res.status(403).json({ mensaje: 'Acceso denegado: esta accion es solo para expertos aprobados' });
@@ -410,6 +424,10 @@ app.get('/api/expertos/:id/contacto', verificarToken, async (req, res) => {
     if (!experto || experto.rol !== 'experto' || !experto.verificado) {
       return res.status(404).json({ mensaje: 'Experto no encontrado' });
     }
+
+    // Registramos el contacto recibido (estadistica), sin bloquear la respuesta
+    Experto.findByIdAndUpdate(experto._id, { $inc: { contactosRecibidos: 1 } })
+      .catch(err => console.error('Error al registrar contacto recibido:', err));
 
     // Limpiar el número: nos aseguramos de que solo tenga dígitos
     const numeroLimpio = experto.whatsapp.replace(/\D/g, '');
