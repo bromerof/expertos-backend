@@ -3,9 +3,11 @@
 const express = require('express');
 const router = express.Router();
 const Necesidad = require('../models/Necesidad');
+const Experto = require('../models/Experto');
 const verificarToken = require('../middleware/verificarToken');
 const verificarClienteAprobado = require('../middleware/verificarClienteAprobado');
 const verificarExpertoPro = require('../middleware/verificarExpertoPro');
+const verificarAdmin = require('../middleware/verificarAdmin');
 
 // Publicar una nueva necesidad (PROTEGIDO: solo clientes aprobados)
 router.post('/', verificarToken, verificarClienteAprobado, async (req, res) => {
@@ -67,6 +69,21 @@ router.get('/mias', verificarToken, async (req, res) => {
   }
 });
 
+// Ver TODAS las ofertas publicadas, abiertas y cerradas (PROTEGIDO: solo admin)
+router.get('/admin/todas', verificarToken, verificarAdmin, async (req, res) => {
+  try {
+    const necesidades = await Necesidad.find()
+      .populate('cliente', 'nombre correo whatsapp')
+      .populate({ path: 'profesion', populate: { path: 'categoria' } })
+      .populate('municipio')
+      .sort({ fechaCreacion: -1 });
+
+    res.status(200).json(necesidades);
+  } catch (error) {
+    res.status(500).json({ mensaje: 'Error al obtener las ofertas', error: error.message });
+  }
+});
+
 // Cerrar una necesidad (PROTEGIDO: solo el cliente dueño)
 router.put('/:id/cerrar', verificarToken, async (req, res) => {
   try {
@@ -89,7 +106,7 @@ router.put('/:id/cerrar', verificarToken, async (req, res) => {
   }
 });
 
-// Eliminar una necesidad (PROTEGIDO: solo el cliente dueño)
+// Eliminar una necesidad (PROTEGIDO: el cliente dueño, o el admin para moderacion)
 router.delete('/:id', verificarToken, async (req, res) => {
   try {
     const necesidad = await Necesidad.findById(req.params.id);
@@ -98,8 +115,13 @@ router.delete('/:id', verificarToken, async (req, res) => {
       return res.status(404).json({ mensaje: 'Necesidad no encontrada' });
     }
 
-    if (necesidad.cliente.toString() !== req.usuario.id) {
-      return res.status(403).json({ mensaje: 'No tienes permiso para eliminar esta necesidad' });
+    const esDueño = necesidad.cliente.toString() === req.usuario.id;
+
+    if (!esDueño) {
+      const solicitante = await Experto.findById(req.usuario.id);
+      if (!solicitante || solicitante.rol !== 'admin') {
+        return res.status(403).json({ mensaje: 'No tienes permiso para eliminar esta necesidad' });
+      }
     }
 
     await Necesidad.findByIdAndDelete(req.params.id);

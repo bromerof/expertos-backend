@@ -7,6 +7,7 @@ const Experto = require('../models/Experto');
 const Calificacion = require('../models/Calificacion');
 const Necesidad = require('../models/Necesidad');
 const Aporte = require('../models/Aporte');
+const Busqueda = require('../models/Busqueda');
 const verificarToken = require('../middleware/verificarToken');
 const verificarAdmin = require('../middleware/verificarAdmin');
 const { mensajeErrorDuplicado } = require('../utils/manejarErrores');
@@ -195,7 +196,12 @@ router.get('/estadisticas', verificarToken, verificarAdmin, async (req, res) => 
       expertosProSinContactos,
       expertosParaOferta,
       personasParaCobertura,
-      totalesVistasContactos
+      totalesVistasContactos,
+      totalBusquedas,
+      busquedasConResultado,
+      busquedasSinResultado,
+      terminosSinResultado,
+      montoAportesAgregado
     ] = await Promise.all([
       Experto.countDocuments({ rol: 'experto' }),
       Experto.countDocuments({ rol: 'experto', verificado: true }),
@@ -222,6 +228,19 @@ router.get('/estadisticas', verificarToken, verificarAdmin, async (req, res) => 
       Experto.aggregate([
         { $match: { rol: 'experto' } },
         { $group: { _id: null, totalVistas: { $sum: '$vistasPerfil' }, totalContactos: { $sum: '$contactosRecibidos' } } }
+      ]),
+      Busqueda.countDocuments(),
+      Busqueda.countDocuments({ resultados: { $gt: 0 } }),
+      Busqueda.countDocuments({ resultados: 0 }),
+      Busqueda.aggregate([
+        { $match: { resultados: 0, termino: { $ne: '' } } },
+        { $group: { _id: { $toLower: '$termino' }, veces: { $sum: 1 } } },
+        { $sort: { veces: -1 } },
+        { $limit: 5 }
+      ]),
+      Aporte.aggregate([
+        { $match: { estado: 'aprobada' } },
+        { $group: { _id: null, totalCentavos: { $sum: '$montoEnCentavos' } } }
       ])
     ]);
 
@@ -265,6 +284,36 @@ router.get('/estadisticas', verificarToken, verificarAdmin, async (req, res) => 
     const coberturaPorDepartamentoLista = Object.values(coberturaPorDepartamento)
       .sort((a, b) => (b.expertos + b.clientes) - (a.expertos + a.clientes));
 
+    // Tasa de busqueda exitosa: de las busquedas registradas, cuantas
+    // encontraron al menos un resultado
+    const tasaBusquedaExitosa = totalBusquedas > 0
+      ? Math.round((busquedasConResultado / totalBusquedas) * 1000) / 10
+      : 0;
+
+    // Terminos que los clientes buscaron y NO encontraron ningun resultado
+    const terminosSinResultadoLista = terminosSinResultado.map((t) => ({
+      termino: t._id,
+      veces: t.veces
+    }));
+
+    // Embudo aproximado: usamos la calificacion dejada como señal de que el
+    // servicio realmente se realizo (no tenemos otra forma de saberlo hoy)
+    const embudo = {
+      busquedas: totalBusquedas,
+      vistasPerfil: totalesVistasContactos[0] ? totalesVistasContactos[0].totalVistas : 0,
+      contactos: totalesVistasContactos[0] ? totalesVistasContactos[0].totalContactos : 0,
+      calificaciones: totalCalificaciones
+    };
+
+    // Ingresos: separamos lo real (aportes ya cobrados de verdad) de una
+    // proyeccion simulada de Pro (Wompi todavia no procesa cobros reales)
+    const PRECIO_PRO_SIMULADO_COP = 4900;
+    const ingresos = {
+      aportesRecaudadosCOP: montoAportesAgregado[0] ? montoAportesAgregado[0].totalCentavos / 100 : 0,
+      proSimuladoMensualCOP: expertosPro * PRECIO_PRO_SIMULADO_COP,
+      proEsSimulado: true
+    };
+
     res.status(200).json({
       totalExpertos,
       expertosAprobados,
@@ -286,7 +335,14 @@ router.get('/estadisticas', verificarToken, verificarAdmin, async (req, res) => 
       ofertaPorCategoria: ofertaPorCategoriaLista,
       coberturaPorDepartamento: coberturaPorDepartamentoLista,
       totalVistas: totalesVistasContactos[0] ? totalesVistasContactos[0].totalVistas : 0,
-      totalContactos: totalesVistasContactos[0] ? totalesVistasContactos[0].totalContactos : 0
+      totalContactos: totalesVistasContactos[0] ? totalesVistasContactos[0].totalContactos : 0,
+      totalBusquedas,
+      busquedasConResultado,
+      busquedasSinResultado,
+      tasaBusquedaExitosa,
+      terminosSinResultado: terminosSinResultadoLista,
+      embudo,
+      ingresos
     });
   } catch (error) {
     res.status(500).json({ mensaje: 'Error al obtener las estadisticas', error: error.message });

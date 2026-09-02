@@ -26,6 +26,7 @@ const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
 const Experto = require('./models/Experto');
+const Busqueda = require('./models/Busqueda');
 
 const app = express();
 app.use(cors());
@@ -242,6 +243,20 @@ app.get('/api/expertos', verificarToken, verificarClienteAprobado, async (req, r
         { _id: { $in: expertos.map(e => e._id) } },
         { $inc: { aparicionesBusqueda: 1 } }
       ).catch(err => console.error('Error al registrar apariciones en busqueda:', err));
+    }
+
+    // Registramos el evento de busqueda solo cuando el cliente realmente uso
+    // un filtro (texto, categoria o ubicacion) — no cuando solo carga la lista
+    // completa sin buscar nada especifico.
+    const terminoBusqueda = req.query.busqueda || req.query.categoria || '';
+    const ubicacionBusqueda = req.query.ubicacion || (req.query.departamento ? 'Departamento seleccionado' : '');
+    if (terminoBusqueda || ubicacionBusqueda) {
+      new Busqueda({
+        cliente: req.usuario.id,
+        termino: terminoBusqueda,
+        ubicacion: ubicacionBusqueda,
+        resultados: expertos.length
+      }).save().catch(err => console.error('Error al registrar la busqueda:', err));
     }
 
     res.status(200).json(expertos);
