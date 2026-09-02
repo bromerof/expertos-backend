@@ -189,7 +189,13 @@ router.get('/estadisticas', verificarToken, verificarAdmin, async (req, res) => 
       totalCalificaciones,
       totalNecesidades,
       necesidadesAbiertas,
-      totalAportesAprobados
+      totalAportesAprobados,
+      todasLasCalificaciones,
+      rankingContactos,
+      expertosProSinContactos,
+      expertosParaOferta,
+      personasParaCobertura,
+      totalesVistasContactos
     ] = await Promise.all([
       Experto.countDocuments({ rol: 'experto' }),
       Experto.countDocuments({ rol: 'experto', verificado: true }),
@@ -200,8 +206,64 @@ router.get('/estadisticas', verificarToken, verificarAdmin, async (req, res) => 
       Calificacion.countDocuments(),
       Necesidad.countDocuments(),
       Necesidad.countDocuments({ estado: 'abierta' }),
-      Aporte.countDocuments({ estado: 'aprobada' })
+      Aporte.countDocuments({ estado: 'aprobada' }),
+      Calificacion.find().select('puntuacion'),
+      Experto.find({ rol: 'experto', verificado: true })
+        .sort({ contactosRecibidos: -1 })
+        .limit(5)
+        .select('nombre contactosRecibidos'),
+      Experto.find({ rol: 'experto', plan: 'pro', verificado: true, contactosRecibidos: 0 })
+        .select('nombre'),
+      Experto.find({ rol: 'experto', verificado: true })
+        .populate({ path: 'profesion', populate: { path: 'categoria' } }),
+      Experto.find({ rol: { $in: ['experto', 'cliente'] }, verificado: true })
+        .populate({ path: 'ubicaciones', populate: { path: 'departamento' } })
+        .select('rol ubicaciones'),
+      Experto.aggregate([
+        { $match: { rol: 'experto' } },
+        { $group: { _id: null, totalVistas: { $sum: '$vistasPerfil' }, totalContactos: { $sum: '$contactosRecibidos' } } }
+      ])
     ]);
+
+    // Calificacion promedio general y distribucion de estrellas (1 a 5)
+    const distribucionEstrellas = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+    let sumaPuntuaciones = 0;
+    todasLasCalificaciones.forEach((c) => {
+      distribucionEstrellas[c.puntuacion] = (distribucionEstrellas[c.puntuacion] || 0) + 1;
+      sumaPuntuaciones += c.puntuacion;
+    });
+    const calificacionPromedioGeneral = todasLasCalificaciones.length > 0
+      ? Math.round((sumaPuntuaciones / todasLasCalificaciones.length) * 10) / 10
+      : 0;
+
+    // Oferta por categoria: cuantos expertos aprobados hay en cada una
+    const ofertaPorCategoria = {};
+    expertosParaOferta.forEach((e) => {
+      const nombreCategoria = e.profesion && e.profesion.categoria ? e.profesion.categoria.nombre : 'Sin categoria';
+      ofertaPorCategoria[nombreCategoria] = (ofertaPorCategoria[nombreCategoria] || 0) + 1;
+    });
+    const ofertaPorCategoriaLista = Object.entries(ofertaPorCategoria)
+      .map(([categoria, cantidad]) => ({ categoria, cantidad }))
+      .sort((a, b) => b.cantidad - a.cantidad);
+
+    // Expertos y clientes por departamento (una persona con varias ciudades
+    // cuenta en cada departamento donde tenga ubicacion)
+    const coberturaPorDepartamento = {};
+    personasParaCobertura.forEach((p) => {
+      (p.ubicaciones || []).forEach((u) => {
+        const nombreDepto = u.departamento ? u.departamento.nombre : 'Sin departamento';
+        if (!coberturaPorDepartamento[nombreDepto]) {
+          coberturaPorDepartamento[nombreDepto] = { departamento: nombreDepto, expertos: 0, clientes: 0 };
+        }
+        if (p.rol === 'experto') {
+          coberturaPorDepartamento[nombreDepto].expertos += 1;
+        } else {
+          coberturaPorDepartamento[nombreDepto].clientes += 1;
+        }
+      });
+    });
+    const coberturaPorDepartamentoLista = Object.values(coberturaPorDepartamento)
+      .sort((a, b) => (b.expertos + b.clientes) - (a.expertos + a.clientes));
 
     res.status(200).json({
       totalExpertos,
@@ -213,7 +275,18 @@ router.get('/estadisticas', verificarToken, verificarAdmin, async (req, res) => 
       totalCalificaciones,
       totalNecesidades,
       necesidadesAbiertas,
-      totalAportesAprobados
+      totalAportesAprobados,
+      calificacionPromedioGeneral,
+      distribucionEstrellas,
+      rankingContactos,
+      expertosProSinContactos: {
+        total: expertosProSinContactos.length,
+        nombres: expertosProSinContactos.map((e) => e.nombre)
+      },
+      ofertaPorCategoria: ofertaPorCategoriaLista,
+      coberturaPorDepartamento: coberturaPorDepartamentoLista,
+      totalVistas: totalesVistasContactos[0] ? totalesVistasContactos[0].totalVistas : 0,
+      totalContactos: totalesVistasContactos[0] ? totalesVistasContactos[0].totalContactos : 0
     });
   } catch (error) {
     res.status(500).json({ mensaje: 'Error al obtener las estadisticas', error: error.message });
