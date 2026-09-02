@@ -29,9 +29,14 @@ router.post('/aporte/generar', verificarToken, async (req, res) => {
     const montoEnCentavos = Math.round(monto) * 100;
     const referencia = `aporte-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
+    // Limpiamos espacios/saltos de linea accidentales que a veces quedan al
+    // copiar y pegar el secreto desde el dashboard de Wompi
+    const secretoIntegridad = (process.env.WOMPI_INTEGRITY_SECRET || '').trim();
+    const llavePublica = (process.env.WOMPI_PUBLIC_KEY || '').trim();
+
     // Firma de integridad: SHA256(referencia + monto_en_centavos + moneda + secreto)
     // SIEMPRE se genera en el backend, nunca en el frontend
-    const cadena = `${referencia}${montoEnCentavos}COP${process.env.WOMPI_INTEGRITY_SECRET}`;
+    const cadena = `${referencia}${montoEnCentavos}COP${secretoIntegridad}`;
     const firma = crypto.createHash('sha256').update(cadena).digest('hex');
 
     const nuevoAporte = new Aporte({
@@ -45,7 +50,7 @@ router.post('/aporte/generar', verificarToken, async (req, res) => {
       referencia,
       firma,
       montoEnCentavos,
-      llavePublica: process.env.WOMPI_PUBLIC_KEY,
+      llavePublica,
       // Wompi rechaza (403) cualquier redirect-url que no sea https:// (por
       // ejemplo, localhost). Por eso el backend siempre entrega una URL fija
       // y segura, sin importar desde donde se este probando.
