@@ -6,8 +6,8 @@ const multer = require('multer');
 const Articulo = require('../models/Articulo');
 const verificarToken = require('../middleware/verificarToken');
 const verificarAdmin = require('../middleware/verificarAdmin');
-const { storage } = require('../config/cloudinary');
-const upload = multer({ storage });
+const { storageBlog } = require('../config/cloudinary');
+const upload = multer({ storage: storageBlog });
 
 // Listar articulos PUBLICADOS (publico, sin necesidad de sesion)
 router.get('/', async (req, res) => {
