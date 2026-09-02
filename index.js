@@ -41,6 +41,7 @@ const calificacionesRoutes = require('./routes/calificaciones');
 const necesidadesRoutes = require('./routes/necesidades');
 const pagosRoutes = require('./routes/pagos');
 const blogRoutes = require('./routes/blog');
+const preguntasRoutes = require('./routes/preguntas');
 const multer = require('multer');
 const { storage } = require('./config/cloudinary');
 const upload = multer({ storage });
@@ -59,6 +60,7 @@ app.use('/api/calificaciones', calificacionesRoutes);
 app.use('/api/necesidades', necesidadesRoutes);
 app.use('/api/pagos', pagosRoutes);
 app.use('/api/blog', blogRoutes);
+app.use('/api/preguntas-frecuentes', preguntasRoutes);
 
 // Conexión a MongoDB
 mongoose.connect(process.env.MONGODB_URI)
