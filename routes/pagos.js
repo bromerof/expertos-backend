@@ -45,7 +45,11 @@ router.post('/aporte/generar', verificarToken, async (req, res) => {
       referencia,
       firma,
       montoEnCentavos,
-      llavePublica: process.env.WOMPI_PUBLIC_KEY
+      llavePublica: process.env.WOMPI_PUBLIC_KEY,
+      // Wompi rechaza (403) cualquier redirect-url que no sea https:// (por
+      // ejemplo, localhost). Por eso el backend siempre entrega una URL fija
+      // y segura, sin importar desde donde se este probando.
+      redirectUrl: process.env.WOMPI_REDIRECT_URL || 'https://www.expertosymas.com/aporte-confirmacion'
     });
   } catch (error) {
     res.status(500).json({ mensaje: 'Error al generar el aporte', error: error.message });
