@@ -105,7 +105,20 @@ router.post('/registro', async (req, res) => {
     // No devolvemos la contraseña, ni siquiera el hash, en la respuesta
     const { contraseña: _, ...expertoSinContraseña } = expertoGuardado.toObject();
 
-    res.status(201).json(expertoSinContraseña);
+    // Generamos el token de sesion de una vez, para que la persona quede
+    // logueada automaticamente tras registrarse (sin tener que pasar por
+    // /login aparte). Esto es necesario, ademas, para poder subir sus fotos
+    // de perfil/documento en el mismo formulario de registro.
+    const token = jwt.sign(
+      { id: expertoGuardado._id, correo: expertoGuardado.correo },
+      process.env.JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    res.status(201).json({
+      ...expertoSinContraseña,
+      token
+    });
   } catch (error) {
     const mensajeDuplicado = mensajeErrorDuplicado(error);
     res.status(400).json({

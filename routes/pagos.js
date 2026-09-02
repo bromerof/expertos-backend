@@ -3,7 +3,9 @@
 const express = require('express');
 const router = express.Router();
 const crypto = require('crypto');
+const jwt = require('jsonwebtoken');
 const Aporte = require('../models/Aporte');
+const Experto = require('../models/Experto');
 const verificarToken = require('../middleware/verificarToken');
 
 // Wompi usa una URL base distinta segun el ambiente (sandbox vs produccion).
@@ -93,6 +95,145 @@ router.get('/verificar/:idTransaccion', verificarToken, async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ mensaje: 'Error al verificar la transaccion', error: error.message });
+  }
+});
+
+
+// ===================================================================
+// SUSCRIPCION PRO RECURRENTE (en preparacion, pendiente de que Wompi
+// active 3D Secure para Fuentes de Pago en la cuenta de EXPERTOS)
+// ===================================================================
+
+const PRECIO_PRO_COP = 4900;
+
+// Obtiene los tokens de aceptacion (terminos y datos personales) que Wompi
+// exige incluir al crear una fuente de pago. Son publicos, no requieren
+// llave privada, y cambian de vez en cuando, por eso se piden en el momento.
+router.get('/token-aceptacion', verificarToken, async (req, res) => {
+  try {
+    const llavePublica = (process.env.WOMPI_PUBLIC_KEY || '').trim();
+    const respuesta = await fetch(`${urlBaseWompi()}/merchants/${llavePublica}`);
+    const datos = await respuesta.json();
+
+    if (!respuesta.ok || !datos.data) {
+      return res.status(400).json({ mensaje: 'No se pudo obtener el token de aceptacion de Wompi' });
+    }
+
+    res.status(200).json({
+      tokenTerminos: datos.data.presigned_acceptance ? datos.data.presigned_acceptance.acceptance_token : null,
+      tokenDatosPersonales: datos.data.presigned_personal_data_auth
+        ? datos.data.presigned_personal_data_auth.acceptance_token
+        : null,
+      llavePublica
+    });
+  } catch (error) {
+    res.status(500).json({ mensaje: 'Error al obtener el token de aceptacion', error: error.message });
+  }
+});
+
+// Registra la fuente de pago (tarjeta tokenizada) para el experto logueado,
+// y activa su mes gratis del plan Pro. El estado inicial puede quedar
+// "PENDING" mientras Wompi resuelve la verificacion 3D Secure.
+//
+// IMPORTANTE: esta ruta la invoca un envio de formulario REAL del navegador
+// (el widget de Wompi arma el <form> y lo envia el solo), no una peticion
+// fetch/AJAX de nuestra app. Por eso NO puede llevar el token en el header
+// "Authorization" como el resto de la API (los formularios nativos del
+// navegador no permiten headers personalizados) — el token viaja como un
+// campo oculto mas del formulario, y aqui lo verificamos a mano.
+router.post('/registrar-fuente-pago', async (req, res) => {
+  const urlFrontend = (process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '');
+
+  try {
+    const { paymentSourceToken, tokenTerminos, tokenDatosPersonales, authToken } = req.body;
+
+    if (!authToken) {
+      return res.redirect(`${urlFrontend}/activar-pro?error=${encodeURIComponent('Tu sesion expiro, inicia sesion de nuevo')}`);
+    }
+
+    let payload;
+    try {
+      payload = jwt.verify(authToken, process.env.JWT_SECRET);
+    } catch (errorToken) {
+      return res.redirect(`${urlFrontend}/activar-pro?error=${encodeURIComponent('Tu sesion no es valida, inicia sesion de nuevo')}`);
+    }
+
+    if (!paymentSourceToken || !tokenTerminos) {
+      return res.redirect(`${urlFrontend}/activar-pro?error=${encodeURIComponent('Faltan datos para registrar la tarjeta')}`);
+    }
+
+    const experto = await Experto.findById(payload.id);
+    if (!experto || experto.rol !== 'experto') {
+      return res.redirect(`${urlFrontend}/activar-pro?error=${encodeURIComponent('Esta accion es solo para expertos')}`);
+    }
+
+    const cuerpoPeticion = {
+      type: 'CARD',
+      token: paymentSourceToken,
+      customer_email: experto.correo,
+      acceptance_token: tokenTerminos
+    };
+    if (tokenDatosPersonales) {
+      cuerpoPeticion.accept_personal_auth = tokenDatosPersonales;
+    }
+
+    const respuesta = await fetch(`${urlBaseWompi()}/payment_sources`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${(process.env.WOMPI_PRIVATE_KEY || '').trim()}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(cuerpoPeticion)
+    });
+    const datos = await respuesta.json();
+
+    if (!respuesta.ok || !datos.data) {
+      return res.redirect(`${urlFrontend}/activar-pro?error=${encodeURIComponent('Wompi rechazo la tarjeta')}`);
+    }
+
+    // Guardamos la fuente de pago y activamos el mes gratis. El estado real
+    // de la verificacion 3DS puede tardar; se confirma despues consultando
+    // GET /api/pagos/fuente-pago/estado
+    const ahora = new Date();
+    const proximoCobro = new Date();
+    proximoCobro.setMonth(proximoCobro.getMonth() + 1);
+
+    experto.suscripcionFuentePagoId = datos.data.id;
+    experto.suscripcionEstado = 'mes_gratis';
+    experto.suscripcionFechaInicio = ahora;
+    experto.suscripcionProximoCobro = proximoCobro;
+    experto.suscripcionIntentosFallidos = 0;
+    experto.plan = 'pro';
+    await experto.save();
+
+    res.redirect(`${urlFrontend}/espera-aprobacion`);
+  } catch (error) {
+    res.redirect(`${urlFrontend}/activar-pro?error=${encodeURIComponent('Error al registrar la tarjeta')}`);
+  }
+});
+
+// Consulta el estado REAL de la fuente de pago del experto logueado
+// (util mientras la verificacion 3DS pasa de "PENDING" a un estado final)
+router.get('/fuente-pago/estado', verificarToken, async (req, res) => {
+  try {
+    const experto = await Experto.findById(req.usuario.id);
+
+    if (!experto || !experto.suscripcionFuentePagoId) {
+      return res.status(404).json({ mensaje: 'Este experto no tiene una fuente de pago registrada' });
+    }
+
+    const respuesta = await fetch(`${urlBaseWompi()}/payment_sources/${experto.suscripcionFuentePagoId}`, {
+      headers: { 'Authorization': `Bearer ${(process.env.WOMPI_PRIVATE_KEY || '').trim()}` }
+    });
+    const datos = await respuesta.json();
+
+    if (!respuesta.ok || !datos.data) {
+      return res.status(400).json({ mensaje: 'No se pudo consultar el estado de la fuente de pago' });
+    }
+
+    res.status(200).json({ estado: datos.data.status });
+  } catch (error) {
+    res.status(500).json({ mensaje: 'Error al consultar el estado de la fuente de pago', error: error.message });
   }
 });
 
