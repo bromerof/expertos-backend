@@ -159,7 +159,7 @@ router.post('/registrar-fuente-pago', async (req, res) => {
     }
 
     if (!payment_source_token || !tokenTerminos) {
-      return res.redirect(`${urlFrontend}/activar-pro?error=${encodeURIComponent('Faltan datos para registrar la tarjeta')}`);
+      return res.redirect(`${urlFrontend}/activar-pro?error=${encodeURIComponent('DEBUG campos recibidos: ' + JSON.stringify(req.body))}`);
     }
 
     const experto = await Experto.findById(payload.id);
