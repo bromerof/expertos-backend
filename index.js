@@ -27,6 +27,8 @@ const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
 const Experto = require('./models/Experto');
 const Busqueda = require('./models/Busqueda');
+const cron = require('node-cron');
+const { procesarCobrosPendientes } = require('./jobs/cobroMensualPro');
 
 const app = express();
 app.use(cors());
@@ -71,6 +73,16 @@ app.use('/api/preguntas-frecuentes', preguntasRoutes);
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log('✅ Conectado a MongoDB Atlas'))
   .catch((error) => console.error('❌ Error al conectar a MongoDB:', error.message));
+
+// Cobro automatico mensual del plan Pro: corre una vez al dia, a las 6:00am
+// hora Colombia. Revisa quien tiene el cobro programado para hoy o antes, y
+// le cobra usando su tarjeta guardada.
+cron.schedule('0 6 * * *', () => {
+  console.log('[cobro-mensual-pro] Iniciando revision diaria de cobros...');
+  procesarCobrosPendientes().catch((error) => {
+    console.error('[cobro-mensual-pro] Error general en el proceso:', error.message);
+  });
+}, { timezone: 'America/Bogota' });
 
 app.get('/', (req, res) => {
   res.send('¡Hola! El servidor de EXPERTOS está funcionando 🎉');

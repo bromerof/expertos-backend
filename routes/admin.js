@@ -8,6 +8,8 @@ const Calificacion = require('../models/Calificacion');
 const Necesidad = require('../models/Necesidad');
 const Aporte = require('../models/Aporte');
 const Busqueda = require('../models/Busqueda');
+const CobroPro = require('../models/CobroPro');
+const { procesarCobrosPendientes, aplicarResultadoCobro, urlBaseWompi } = require('../jobs/cobroMensualPro');
 const verificarToken = require('../middleware/verificarToken');
 const verificarAdmin = require('../middleware/verificarAdmin');
 const { mensajeErrorDuplicado } = require('../utils/manejarErrores');
@@ -346,6 +348,79 @@ router.get('/estadisticas', verificarToken, verificarAdmin, async (req, res) => 
     });
   } catch (error) {
     res.status(500).json({ mensaje: 'Error al obtener las estadisticas', error: error.message });
+  }
+});
+
+// Ver el historial de cobros automaticos de la suscripcion Pro (solo admin)
+router.get('/cobros-pro', verificarToken, verificarAdmin, async (req, res) => {
+  try {
+    const cobros = await CobroPro.find()
+      .populate('experto', 'nombre correo')
+      .sort({ fecha: -1 })
+      .limit(100);
+    res.status(200).json(cobros);
+  } catch (error) {
+    res.status(500).json({ mensaje: 'Error al obtener el historial de cobros', error: error.message });
+  }
+});
+
+// Ejecuta el proceso de cobro mensual manualmente, sin esperar al horario
+// programado (SOLO para pruebas — en producción normal corre solo cada dia)
+router.post('/cobros-pro/ejecutar-ahora', verificarToken, verificarAdmin, async (req, res) => {
+  try {
+    await procesarCobrosPendientes();
+    res.status(200).json({ mensaje: 'Proceso de cobro ejecutado. Revisa el historial de cobros para ver el resultado.' });
+  } catch (error) {
+    res.status(500).json({ mensaje: 'Error al ejecutar el proceso de cobro', error: error.message });
+  }
+});
+
+// Verifica el estado real de un cobro que quedo "pendiente", y aplica las
+// consecuencias (activar el siguiente mes, reintentar, o bajar a Free) segun
+// lo que responda Wompi. Necesario porque el proceso diario NO reintenta
+// automaticamente mientras haya un cobro pendiente sin resolver.
+router.post('/cobros-pro/:id/verificar', verificarToken, verificarAdmin, async (req, res) => {
+  try {
+    const cobro = await CobroPro.findById(req.params.id).populate('experto');
+
+    if (!cobro) {
+      return res.status(404).json({ mensaje: 'Cobro no encontrado' });
+    }
+    if (cobro.estado !== 'pendiente') {
+      return res.status(400).json({ mensaje: 'Este cobro ya fue resuelto anteriormente' });
+    }
+    if (!cobro.idTransaccionWompi) {
+      return res.status(400).json({ mensaje: 'Este cobro no tiene un ID de transaccion de Wompi para verificar' });
+    }
+
+    const respuesta = await fetch(`${urlBaseWompi()}/transactions/${cobro.idTransaccionWompi}`, {
+      headers: { 'Authorization': `Bearer ${(process.env.WOMPI_PRIVATE_KEY || '').trim()}` }
+    });
+    const datos = await respuesta.json();
+
+    if (!respuesta.ok || !datos.data) {
+      return res.status(400).json({ mensaje: 'No se pudo verificar la transaccion con Wompi' });
+    }
+
+    const estadoWompi = datos.data.status;
+    const nuevoEstado = estadoWompi === 'APPROVED' ? 'aprobada'
+      : (estadoWompi === 'DECLINED' || estadoWompi === 'ERROR' || estadoWompi === 'VOIDED') ? 'rechazada'
+      : 'pendiente';
+
+    if (nuevoEstado === 'pendiente') {
+      return res.status(200).json({ mensaje: 'Wompi todavia no ha resuelto esta transaccion. Intenta verificar mas tarde.' });
+    }
+
+    cobro.estado = nuevoEstado;
+    await cobro.save();
+
+    const experto = cobro.experto;
+    const esReintento = cobro.intentoNumero > 1;
+    await aplicarResultadoCobro(experto, nuevoEstado, esReintento);
+
+    res.status(200).json({ mensaje: `Cobro verificado: quedo ${nuevoEstado}. Se actualizo la cuenta del experto.` });
+  } catch (error) {
+    res.status(500).json({ mensaje: 'Error al verificar el cobro', error: error.message });
   }
 });
 
