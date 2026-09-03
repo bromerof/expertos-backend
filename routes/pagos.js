@@ -145,7 +145,7 @@ router.post('/registrar-fuente-pago', async (req, res) => {
   const urlFrontend = (process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '');
 
   try {
-    const { paymentSourceToken, tokenTerminos, tokenDatosPersonales, authToken } = req.body;
+    const { payment_source_token, tokenTerminos, tokenDatosPersonales, authToken } = req.body;
 
     if (!authToken) {
       return res.redirect(`${urlFrontend}/activar-pro?error=${encodeURIComponent('Tu sesion expiro, inicia sesion de nuevo')}`);
@@ -158,10 +158,8 @@ router.post('/registrar-fuente-pago', async (req, res) => {
       return res.redirect(`${urlFrontend}/activar-pro?error=${encodeURIComponent('Tu sesion no es valida, inicia sesion de nuevo')}`);
     }
 
-    if (!paymentSourceToken || !tokenTerminos) {
-      // TEMPORAL: mostramos exactamente que campos llegaron de verdad, para
-      // descubrir los nombres reales que usa el widget de Wompi
-      return res.redirect(`${urlFrontend}/activar-pro?error=${encodeURIComponent('DEBUG campos recibidos: ' + JSON.stringify(req.body))}`);
+    if (!payment_source_token || !tokenTerminos) {
+      return res.redirect(`${urlFrontend}/activar-pro?error=${encodeURIComponent('Faltan datos para registrar la tarjeta')}`);
     }
 
     const experto = await Experto.findById(payload.id);
@@ -171,7 +169,7 @@ router.post('/registrar-fuente-pago', async (req, res) => {
 
     const cuerpoPeticion = {
       type: 'CARD',
-      token: paymentSourceToken,
+      token: payment_source_token,
       customer_email: experto.correo,
       acceptance_token: tokenTerminos
     };
@@ -210,9 +208,7 @@ router.post('/registrar-fuente-pago', async (req, res) => {
 
     res.redirect(`${urlFrontend}/espera-aprobacion`);
   } catch (error) {
-    // TEMPORAL: mientras depuramos el flujo de Pro, mostramos el error real
-    // en vez de un mensaje generico, para saber exactamente que esta fallando
-    res.redirect(`${urlFrontend}/activar-pro?error=${encodeURIComponent('DEBUG: ' + error.message)}`);
+    res.redirect(`${urlFrontend}/activar-pro?error=${encodeURIComponent('Error al registrar la tarjeta')}`);
   }
 });
 
