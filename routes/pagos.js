@@ -208,7 +208,9 @@ router.post('/registrar-fuente-pago', async (req, res) => {
 
     res.redirect(`${urlFrontend}/espera-aprobacion`);
   } catch (error) {
-    res.redirect(`${urlFrontend}/activar-pro?error=${encodeURIComponent('Error al registrar la tarjeta')}`);
+    // TEMPORAL: mientras depuramos el flujo de Pro, mostramos el error real
+    // en vez de un mensaje generico, para saber exactamente que esta fallando
+    res.redirect(`${urlFrontend}/activar-pro?error=${encodeURIComponent('DEBUG: ' + error.message)}`);
   }
 });
 

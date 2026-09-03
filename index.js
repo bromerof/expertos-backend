@@ -54,6 +54,11 @@ const { correoValido } = require('./utils/validaciones');
 
 // Middleware: permite que el servidor entienda JSON en las peticiones
 app.use(express.json());
+// Permite tambien leer formularios enviados de la forma estandar del
+// navegador (application/x-www-form-urlencoded) — necesario para recibir el
+// formulario que el widget de Wompi arma y envia el solo, ya que un
+// formulario HTML normal NO se envia como JSON.
+app.use(express.urlencoded({ extended: true }));
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/calificaciones', calificacionesRoutes);
