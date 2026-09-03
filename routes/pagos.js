@@ -159,7 +159,9 @@ router.post('/registrar-fuente-pago', async (req, res) => {
     }
 
     if (!paymentSourceToken || !tokenTerminos) {
-      return res.redirect(`${urlFrontend}/activar-pro?error=${encodeURIComponent('Faltan datos para registrar la tarjeta')}`);
+      // TEMPORAL: mostramos exactamente que campos llegaron de verdad, para
+      // descubrir los nombres reales que usa el widget de Wompi
+      return res.redirect(`${urlFrontend}/activar-pro?error=${encodeURIComponent('DEBUG campos recibidos: ' + JSON.stringify(req.body))}`);
     }
 
     const experto = await Experto.findById(payload.id);
