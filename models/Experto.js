@@ -137,6 +137,12 @@ const expertoSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+  // Galeria de fotos de trabajos, exclusiva del plan Pro (maximo 6 fotos,
+  // validado en el backend al subir)
+  galeriaFotos: {
+    type: [String],
+    default: []
+  },
   vistasPerfil: {
     type: Number,
     default: 0

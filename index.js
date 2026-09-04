@@ -45,8 +45,9 @@ const pagosRoutes = require('./routes/pagos');
 const blogRoutes = require('./routes/blog');
 const preguntasRoutes = require('./routes/preguntas');
 const multer = require('multer');
-const { storage } = require('./config/cloudinary');
+const { storage, storageGaleria } = require('./config/cloudinary');
 const upload = multer({ storage });
+const uploadGaleria = multer({ storage: storageGaleria });
 const Departamento = require('./models/Departamento');
 const Municipio = require('./models/Municipio');
 const Categoria = require('./models/Categoria');
@@ -607,5 +608,64 @@ app.post('/api/expertos/:id/foto', verificarToken, upload.single('foto'), async 
     res.status(200).json({ mensaje: 'Foto actualizada correctamente', experto });
   } catch (error) {
     res.status(500).json({ mensaje: 'Error al subir la foto', error: error.message });
+  }
+});
+
+const MAX_FOTOS_GALERIA = 6;
+
+// Subir una foto a la galeria de trabajos (solo expertos Pro)
+app.post('/api/expertos/:id/galeria', verificarToken, uploadGaleria.single('foto'), async (req, res) => {
+  try {
+    if (req.usuario.id !== req.params.id) {
+      return res.status(403).json({ mensaje: 'No tienes permiso para modificar este perfil' });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ mensaje: 'No se recibió ningún archivo de imagen' });
+    }
+
+    const experto = await Experto.findById(req.params.id);
+    if (!experto) {
+      return res.status(404).json({ mensaje: 'Experto no encontrado' });
+    }
+    if (experto.plan !== 'pro') {
+      return res.status(403).json({ mensaje: 'La galería de trabajos es exclusiva del plan Pro' });
+    }
+    if (experto.galeriaFotos.length >= MAX_FOTOS_GALERIA) {
+      return res.status(400).json({ mensaje: `Ya alcanzaste el máximo de ${MAX_FOTOS_GALERIA} fotos en tu galería` });
+    }
+
+    experto.galeriaFotos.push(req.file.path);
+    await experto.save();
+
+    res.status(200).json({ mensaje: 'Foto agregada a tu galería', experto });
+  } catch (error) {
+    res.status(500).json({ mensaje: 'Error al subir la foto a la galería', error: error.message });
+  }
+});
+
+// Eliminar una foto de la galeria de trabajos, por su posicion en el arreglo
+app.delete('/api/expertos/:id/galeria/:indice', verificarToken, async (req, res) => {
+  try {
+    if (req.usuario.id !== req.params.id) {
+      return res.status(403).json({ mensaje: 'No tienes permiso para modificar este perfil' });
+    }
+
+    const experto = await Experto.findById(req.params.id);
+    if (!experto) {
+      return res.status(404).json({ mensaje: 'Experto no encontrado' });
+    }
+
+    const indice = parseInt(req.params.indice, 10);
+    if (isNaN(indice) || indice < 0 || indice >= experto.galeriaFotos.length) {
+      return res.status(400).json({ mensaje: 'Índice de foto inválido' });
+    }
+
+    experto.galeriaFotos.splice(indice, 1);
+    await experto.save();
+
+    res.status(200).json({ mensaje: 'Foto eliminada de tu galería', experto });
+  } catch (error) {
+    res.status(500).json({ mensaje: 'Error al eliminar la foto de la galería', error: error.message });
   }
 });

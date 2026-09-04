@@ -32,4 +32,15 @@ const storageBlog = new CloudinaryStorage({
   }
 });
 
-module.exports = { cloudinary, storage, storageBlog };
+// Storage para la galeria de fotos de trabajos (plan Pro): igual que las
+// portadas del blog, sin recorte forzado, solo se limita el ancho maximo
+const storageGaleria = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: {
+    folder: 'expertos-galeria',
+    allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
+    transformation: [{ width: 1200, crop: 'limit' }]
+  }
+});
+
+module.exports = { cloudinary, storage, storageBlog, storageGaleria };
