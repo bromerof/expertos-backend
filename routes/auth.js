@@ -33,11 +33,8 @@ router.post('/registro', async (req, res) => {
         if (restoDatos.correo) {
       restoDatos.correo = restoDatos.correo.trim().toLowerCase();
       if (!correoValido(restoDatos.correo)) {
-        return res.status(400).json({ mensaje: 'El correo electronico no tiene un formato valido' });
+        return res.status(400).json({ mensaje: 'El correo electrónico no tiene un formato válido' });
       }
-          if (restoDatos.numeroDocumento) {
-      restoDatos.numeroDocumento = restoDatos.numeroDocumento.trim();
-    }
     }
 
     if (!contraseña) {
@@ -45,7 +42,22 @@ router.post('/registro', async (req, res) => {
     }
 
     if (!contraseñaValida(contraseña)) {
-      return res.status(400).json({ mensaje: 'La contraseña debe tener minimo 6 caracteres' });
+      return res.status(400).json({ mensaje: 'La contraseña debe tener mínimo 6 caracteres' });
+    }
+
+    // Verificamos el numero de documento repetido de forma explicita (no
+    // dependemos solo del error de indice duplicado de Mongo), para dar un
+    // mensaje claro, igual que hacemos con el correo.
+    if (restoDatos.numeroDocumento) {
+      restoDatos.numeroDocumento = restoDatos.numeroDocumento.trim();
+      const rolParaVerificar = restoDatos.rol === 'cliente' ? 'cliente' : 'experto';
+      const documentoExistente = await Experto.findOne({
+        numeroDocumento: restoDatos.numeroDocumento,
+        rol: rolParaVerificar
+      });
+      if (documentoExistente) {
+        return res.status(400).json({ mensaje: 'Este número de documento ya está registrado' });
+      }
     }
 
     // Medida de seguridad: este endpoint es publico (sin necesidad de iniciar sesion),
@@ -57,7 +69,7 @@ router.post('/registro', async (req, res) => {
     // Validacion obligatoria de aceptacion legal (no basta con la validacion
     // del frontend, porque este endpoint podria llamarse directamente)
     if (!restoDatos.terminosAceptados || !restoDatos.datosAceptados) {
-      return res.status(400).json({ mensaje: 'Debes aceptar los Terminos de Uso y la Politica de Tratamiento de Datos Personales' });
+      return res.status(400).json({ mensaje: 'Debes aceptar los Términos de Uso y la Política de Tratamiento de Datos Personales' });
     }
     if (restoDatos.rol === 'experto' && !restoDatos.reglasAceptadas) {
       return res.status(400).json({ mensaje: 'Debes aceptar las Reglas para Expertos' });
@@ -85,10 +97,10 @@ router.post('/registro', async (req, res) => {
         const profesionEsOtra = profesionElegida.nombre.trim().toLowerCase() === 'otra';
 
         if (categoriaEsOtra && (!restoDatos.otraCategoriaTexto || !restoDatos.otraCategoriaTexto.trim())) {
-          return res.status(400).json({ mensaje: 'Debes indicar cual es tu categoria especifica' });
+          return res.status(400).json({ mensaje: 'Debes indicar cuál es tu categoría específica' });
         }
         if (profesionEsOtra && (!restoDatos.otraProfesionTexto || !restoDatos.otraProfesionTexto.trim())) {
-          return res.status(400).json({ mensaje: 'Debes indicar cual es tu profesion especifica' });
+          return res.status(400).json({ mensaje: 'Debes indicar cuál es tu profesión específica' });
         }
       }
     }
