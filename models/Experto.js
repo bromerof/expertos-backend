@@ -105,6 +105,12 @@ const expertoSchema = new mongoose.Schema({
     required: true,
     select: false
   },
+  // Si la cuenta se creo o vincula con "Continuar con Google", guardamos su
+  // identificador unico de Google aqui (nunca se le pide contraseña despues)
+  googleId: {
+    type: String,
+    default: ''
+  },
     foto: {
     type: String,
     default: ''

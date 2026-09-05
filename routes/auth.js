@@ -5,6 +5,8 @@ const router = express.Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
+const { OAuth2Client } = require('google-auth-library');
+const clienteGoogle = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 const Experto = require('../models/Experto');
 const Profesion = require('../models/Profesion');
 const { mensajeErrorDuplicado } = require('../utils/manejarErrores');
@@ -283,6 +285,133 @@ router.post('/restablecer-contrasena', async (req, res) => {
     res.status(200).json({ mensaje: 'Tu contraseña fue actualizada correctamente. Ya puedes iniciar sesión.' });
   } catch (error) {
     res.status(500).json({ mensaje: 'Error al restablecer la contraseña', error: error.message });
+  }
+});
+
+// Verifica el token de Google. Si ya existe una cuenta de cliente con ese
+// correo, la deja entrar de una vez (login). Si no existe, devuelve los
+// datos basicos de Google para que el frontend muestre el resto del
+// formulario de registro (documento, WhatsApp, ciudad, etc.)
+router.post('/google/verificar', async (req, res) => {
+  try {
+    const { credential } = req.body;
+    if (!credential) {
+      return res.status(400).json({ mensaje: 'Falta el token de Google' });
+    }
+
+    const ticket = await clienteGoogle.verifyIdToken({
+      idToken: credential,
+      audience: process.env.GOOGLE_CLIENT_ID
+    });
+    const datosGoogle = ticket.getPayload();
+
+    const experto = await Experto.findOne({ correo: datosGoogle.email.toLowerCase(), rol: 'cliente' });
+
+    if (experto) {
+      const token = jwt.sign(
+        { id: experto._id, correo: experto.correo },
+        process.env.JWT_SECRET,
+        { expiresIn: '7d' }
+      );
+      return res.status(200).json({
+        existe: true,
+        token,
+        experto: { id: experto._id, nombre: experto.nombre, correo: experto.correo, rol: experto.rol }
+      });
+    }
+
+    // No existe todavia: devolvemos los datos de Google para prellenar el
+    // resto del formulario de registro
+    res.status(200).json({
+      existe: false,
+      nombre: datosGoogle.name || '',
+      correo: datosGoogle.email,
+      foto: datosGoogle.picture || '',
+      googleId: datosGoogle.sub
+    });
+  } catch (error) {
+    res.status(401).json({ mensaje: 'No se pudo verificar la cuenta de Google', error: error.message });
+  }
+});
+
+// Completa el registro de un cliente nuevo que entro con Google, agregando
+// los datos que Google no entrega (documento, WhatsApp, ubicacion, legales)
+router.post('/google/completar-registro', async (req, res) => {
+  try {
+    const { credential, tipoDocumento, numeroDocumento, whatsapp, ubicaciones,
+      atiendePresencial, atiendeVirtual, coberturaVirtualNacional,
+      terminosAceptados, datosAceptados, comunicacionesAceptadas } = req.body;
+
+    if (!credential) {
+      return res.status(400).json({ mensaje: 'Falta el token de Google' });
+    }
+    if (!terminosAceptados || !datosAceptados) {
+      return res.status(400).json({ mensaje: 'Debes aceptar los Términos de Uso y autorizar el tratamiento de tus datos personales' });
+    }
+
+    // Volvemos a verificar el token (nunca confiamos en datos ya "vistos" sin revalidar)
+    const ticket = await clienteGoogle.verifyIdToken({
+      idToken: credential,
+      audience: process.env.GOOGLE_CLIENT_ID
+    });
+    const datosGoogle = ticket.getPayload();
+    const correo = datosGoogle.email.toLowerCase();
+
+    const yaExiste = await Experto.findOne({ correo, rol: 'cliente' });
+    if (yaExiste) {
+      return res.status(400).json({ mensaje: 'Ya existe una cuenta de cliente con este correo' });
+    }
+
+    if (numeroDocumento) {
+      const documentoExistente = await Experto.findOne({ numeroDocumento: numeroDocumento.trim(), rol: 'cliente' });
+      if (documentoExistente) {
+        return res.status(400).json({ mensaje: 'Este número de documento ya está registrado' });
+      }
+    }
+
+    // La cuenta nunca inicia sesion con contraseña, pero el campo es
+    // obligatorio en el modelo: guardamos un hash aleatorio que nunca se usa
+    const contraseñaAleatoria = crypto.randomBytes(32).toString('hex');
+    const contraseñaCifrada = await bcrypt.hash(contraseñaAleatoria, 10);
+
+    const nuevoCliente = new Experto({
+      nombre: datosGoogle.name || '',
+      correo,
+      contraseña: contraseñaCifrada,
+      googleId: datosGoogle.sub,
+      foto: datosGoogle.picture || '',
+      rol: 'cliente',
+      tipoDocumento: tipoDocumento || 'CC',
+      numeroDocumento: numeroDocumento ? numeroDocumento.trim() : '',
+      whatsapp,
+      ubicaciones: ubicaciones || [],
+      atiendePresencial: atiendePresencial !== undefined ? atiendePresencial : true,
+      atiendeVirtual: atiendeVirtual || false,
+      coberturaVirtualNacional: coberturaVirtualNacional || false,
+      terminosAceptados: true,
+      terminosFecha: new Date(),
+      datosAceptados: true,
+      datosFecha: new Date(),
+      comunicacionesAceptadas: comunicacionesAceptadas || false,
+      comunicacionesFecha: comunicacionesAceptadas ? new Date() : undefined
+    });
+
+    const guardado = await nuevoCliente.save();
+
+    const token = jwt.sign(
+      { id: guardado._id, correo: guardado.correo },
+      process.env.JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    res.status(201).json({
+      _id: guardado._id,
+      nombre: guardado.nombre,
+      correo: guardado.correo,
+      token
+    });
+  } catch (error) {
+    res.status(400).json({ mensaje: mensajeErrorDuplicado(error) || 'Error al completar el registro', error: error.message });
   }
 });
 
