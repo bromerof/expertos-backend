@@ -143,6 +143,15 @@ const expertoSchema = new mongoose.Schema({
     type: [String],
     default: []
   },
+  // Recuperacion de contraseña: guardamos un hash del token (nunca el token
+  // real), y la fecha en que deja de ser valido (1 hora despues de pedirlo)
+  resetPasswordToken: {
+    type: String,
+    default: ''
+  },
+  resetPasswordExpira: {
+    type: Date
+  },
   vistasPerfil: {
     type: Number,
     default: 0

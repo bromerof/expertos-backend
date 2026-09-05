@@ -4,6 +4,7 @@ const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const Experto = require('../models/Experto');
 const Profesion = require('../models/Profesion');
 const { mensajeErrorDuplicado } = require('../utils/manejarErrores');
@@ -187,6 +188,101 @@ router.post('/login', async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ mensaje: 'Error al iniciar sesión', error: error.message });
+  }
+});
+
+// Pide recuperar la contraseña: genera un token, lo guarda (con fecha de
+// vencimiento de 1 hora), y envia un correo con el enlace usando Resend.
+// Por seguridad, SIEMPRE respondemos el mismo mensaje generico, exista o no
+// una cuenta con ese correo (para no revelar si un correo esta registrado).
+router.post('/olvide-contrasena', async (req, res) => {
+  try {
+    const correo = (req.body.correo || '').trim().toLowerCase();
+    const mensajeGenerico = { mensaje: 'Si el correo existe en nuestra plataforma, te enviamos un enlace para restablecer tu contraseña.' };
+
+    if (!correo) {
+      return res.status(400).json({ mensaje: 'Debes indicar tu correo electrónico' });
+    }
+
+    const experto = await Experto.findOne({ correo });
+    if (!experto) {
+      // No revelamos si el correo existe o no
+      return res.status(200).json(mensajeGenerico);
+    }
+
+    const tokenSinCifrar = crypto.randomBytes(32).toString('hex');
+    const tokenCifrado = crypto.createHash('sha256').update(tokenSinCifrar).digest('hex');
+
+    experto.resetPasswordToken = tokenCifrado;
+    experto.resetPasswordExpira = new Date(Date.now() + 60 * 60 * 1000); // 1 hora
+    await experto.save();
+
+    const urlFrontend = (process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '');
+    const enlace = `${urlFrontend}/restablecer-contrasena?token=${tokenSinCifrar}`;
+
+    await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        from: 'EXPERTOS <no-responder@expertosymas.com>',
+        to: [experto.correo],
+        subject: 'Recupera tu contraseña en EXPERTOS',
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto;">
+            <h2 style="color: #2C3E50;">Recupera tu contraseña</h2>
+            <p>Hola ${experto.nombre},</p>
+            <p>Recibimos una solicitud para restablecer tu contraseña en EXPERTOS. Si fuiste tú, haz clic en el siguiente botón:</p>
+            <p style="text-align: center; margin: 24px 0;">
+              <a href="${enlace}" style="background-color: #2C3E50; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold;">Restablecer contraseña</a>
+            </p>
+            <p style="color: #888; font-size: 13px;">Este enlace vence en 1 hora. Si tú no pediste esto, puedes ignorar este correo.</p>
+          </div>
+        `
+      })
+    });
+
+    res.status(200).json(mensajeGenerico);
+  } catch (error) {
+    res.status(500).json({ mensaje: 'Error al procesar la solicitud', error: error.message });
+  }
+});
+
+// Restablece la contraseña usando el token recibido por correo
+router.post('/restablecer-contrasena', async (req, res) => {
+  try {
+    const { token, nuevaContraseña } = req.body;
+
+    if (!token || !nuevaContraseña) {
+      return res.status(400).json({ mensaje: 'Faltan datos para restablecer la contraseña' });
+    }
+
+    if (!contraseñaValida(nuevaContraseña)) {
+      return res.status(400).json({ mensaje: 'La contraseña debe tener mínimo 6 caracteres' });
+    }
+
+    const tokenCifrado = crypto.createHash('sha256').update(token).digest('hex');
+
+    const experto = await Experto.findOne({
+      resetPasswordToken: tokenCifrado,
+      resetPasswordExpira: { $gt: new Date() }
+    });
+
+    if (!experto) {
+      return res.status(400).json({ mensaje: 'El enlace no es válido o ya venció. Solicita uno nuevo.' });
+    }
+
+    const contraseñaCifrada = await bcrypt.hash(nuevaContraseña, 10);
+    experto.contraseña = contraseñaCifrada;
+    experto.resetPasswordToken = '';
+    experto.resetPasswordExpira = undefined;
+    await experto.save();
+
+    res.status(200).json({ mensaje: 'Tu contraseña fue actualizada correctamente. Ya puedes iniciar sesión.' });
+  } catch (error) {
+    res.status(500).json({ mensaje: 'Error al restablecer la contraseña', error: error.message });
   }
 });
 
