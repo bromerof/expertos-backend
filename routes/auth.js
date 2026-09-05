@@ -127,7 +127,7 @@ router.post('/registro', async (req, res) => {
     const token = jwt.sign(
       { id: expertoGuardado._id, correo: expertoGuardado.correo },
       process.env.JWT_SECRET,
-      { expiresIn: '7d' }
+      { expiresIn: '2h' }
     );
 
     res.status(201).json({
@@ -180,7 +180,7 @@ router.post('/login', async (req, res) => {
     const token = jwt.sign(
       { id: experto._id, correo: experto.correo },
       process.env.JWT_SECRET,
-      { expiresIn: '7d' }
+      { expiresIn: '2h' }
     );
 
     res.status(200).json({
@@ -311,7 +311,7 @@ router.post('/google/verificar', async (req, res) => {
       const token = jwt.sign(
         { id: experto._id, correo: experto.correo },
         process.env.JWT_SECRET,
-        { expiresIn: '7d' }
+        { expiresIn: '2h' }
       );
       return res.status(200).json({
         existe: true,
@@ -401,7 +401,7 @@ router.post('/google/completar-registro', async (req, res) => {
     const token = jwt.sign(
       { id: guardado._id, correo: guardado.correo },
       process.env.JWT_SECRET,
-      { expiresIn: '7d' }
+      { expiresIn: '2h' }
     );
 
     res.status(201).json({
