@@ -97,6 +97,39 @@ router.delete('/expertos/:id/rechazar', verificarToken, verificarAdmin, async (r
       return res.status(400).json({ mensaje: 'Esta cuenta ya fue aprobada, no se puede rechazar. Usa "Suspender" en su lugar.' });
     }
 
+    const motivo = (req.body.motivo || '').trim();
+
+    // Avisamos por correo ANTES de eliminar la cuenta, para tener sus datos a mano
+    if (motivo && experto.correo) {
+      try {
+        await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            from: 'EXPERTOS <no-responder@expertosymas.com>',
+            to: [experto.correo],
+            subject: 'Tu solicitud en EXPERTOS no fue aprobada',
+            html: `
+              <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto;">
+                <h2 style="color: #2C3E50;">Tu solicitud no fue aprobada</h2>
+                <p>Hola ${experto.nombre},</p>
+                <p>Revisamos tu solicitud de registro en EXPERTOS y, por el momento, no pudimos aprobarla.</p>
+                <p><strong>Motivo:</strong> ${motivo}</p>
+                <p>Si crees que esto es un error, o quieres corregir tu información y volver a registrarte, puedes intentarlo de nuevo en cualquier momento.</p>
+                <p>Si tienes alguna duda, puedes escribirnos por WhatsApp al <strong>301 467 6244</strong>.</p>
+              </div>
+            `
+          })
+        });
+      } catch (errorCorreo) {
+        console.error('No se pudo enviar el correo de rechazo:', errorCorreo.message);
+        // No detenemos el rechazo aunque el correo falle
+      }
+    }
+
     await Experto.findByIdAndDelete(req.params.id);
 
     res.status(200).json({ mensaje: 'Solicitud rechazada y eliminada correctamente' });

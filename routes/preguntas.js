@@ -50,7 +50,7 @@ router.put('/:id', verificarToken, verificarAdmin, async (req, res) => {
     if (respuesta) cambios.respuesta = respuesta.trim();
     if (orden !== undefined) cambios.orden = orden;
 
-    const actualizada = await Pregunta.findByIdAndUpdate(req.params.id, cambios, { new: true });
+    const actualizada = await Pregunta.findByIdAndUpdate(req.params.id, cambios, { returnDocument: 'after' });
 
     if (!actualizada) {
       return res.status(404).json({ mensaje: 'Pregunta no encontrada' });

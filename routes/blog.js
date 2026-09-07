@@ -91,7 +91,7 @@ router.put('/:id', verificarToken, verificarAdmin, async (req, res) => {
       cambios.estado = estado;
     }
 
-    const articuloActualizado = await Articulo.findByIdAndUpdate(req.params.id, cambios, { new: true });
+    const articuloActualizado = await Articulo.findByIdAndUpdate(req.params.id, cambios, { returnDocument: 'after' });
 
     if (!articuloActualizado) {
       return res.status(404).json({ mensaje: 'Articulo no encontrado' });
@@ -128,7 +128,7 @@ router.post('/:id/portada', verificarToken, verificarAdmin, upload.single('image
     const articulo = await Articulo.findByIdAndUpdate(
       req.params.id,
       { imagenPortada: req.file.path },
-      { new: true }
+      { returnDocument: 'after' }
     );
 
     if (!articulo) {

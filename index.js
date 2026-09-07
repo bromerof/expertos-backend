@@ -407,7 +407,7 @@ app.put('/api/expertos/:id', verificarToken, async (req, res) => {
     const expertoActualizado = await Experto.findByIdAndUpdate(
       req.params.id,
       req.body,
-      { new: true, runValidators: true }
+      { returnDocument: 'after', runValidators: true }
     );
 
     if (!expertoActualizado) {
@@ -545,7 +545,7 @@ app.post('/api/expertos/:id/foto-documento-frente', verificarToken, upload.singl
     const experto = await Experto.findByIdAndUpdate(
       req.params.id,
       { fotoDocumentoFrente: req.file.path },
-      { new: true }
+      { returnDocument: 'after' }
     );
 
     if (!experto) {
@@ -572,7 +572,7 @@ app.post('/api/expertos/:id/foto-documento-reverso', verificarToken, upload.sing
     const experto = await Experto.findByIdAndUpdate(
       req.params.id,
       { fotoDocumentoReverso: req.file.path },
-      { new: true }
+      { returnDocument: 'after' }
     );
 
     if (!experto) {
@@ -598,7 +598,7 @@ app.post('/api/expertos/:id/foto', verificarToken, upload.single('foto'), async 
     const experto = await Experto.findByIdAndUpdate(
       req.params.id,
       { foto: req.file.path },
-      { new: true }
+      { returnDocument: 'after' }
     );
 
     if (!experto) {

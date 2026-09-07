@@ -158,6 +158,15 @@ const expertoSchema = new mongoose.Schema({
   resetPasswordExpira: {
     type: Date
   },
+  // Control de intentos fallidos de inicio de sesion: se bloquea la cuenta
+  // temporalmente despues de varios intentos seguidos con clave incorrecta
+  intentosLoginFallidos: {
+    type: Number,
+    default: 0
+  },
+  bloqueadoHasta: {
+    type: Date
+  },
   vistasPerfil: {
     type: Number,
     default: 0

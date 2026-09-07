@@ -171,10 +171,43 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ mensaje: 'Credenciales incorrectas' });
     }
 
+    const LIMITE_INTENTOS = 3;
+    const MINUTOS_BLOQUEO = 15;
+
+    // Si la cuenta esta bloqueada temporalmente, no dejamos ni intentar la contraseña
+    if (experto.bloqueadoHasta && experto.bloqueadoHasta > new Date()) {
+      const minutosRestantes = Math.ceil((experto.bloqueadoHasta - new Date()) / 60000);
+      return res.status(403).json({
+        mensaje: `Por seguridad, esta cuenta quedó bloqueada temporalmente por varios intentos fallidos. Intenta de nuevo en ${minutosRestantes} minuto${minutosRestantes === 1 ? '' : 's'}.`
+      });
+    }
+
     const coincide = await bcrypt.compare(contraseña, experto.contraseña);
 
     if (!coincide) {
-      return res.status(401).json({ mensaje: 'Credenciales incorrectas' });
+      experto.intentosLoginFallidos = (experto.intentosLoginFallidos || 0) + 1;
+
+      if (experto.intentosLoginFallidos >= LIMITE_INTENTOS) {
+        experto.bloqueadoHasta = new Date(Date.now() + MINUTOS_BLOQUEO * 60 * 1000);
+        experto.intentosLoginFallidos = 0;
+        await experto.save();
+        return res.status(403).json({
+          mensaje: `Por seguridad, tu cuenta quedó bloqueada temporalmente por ${MINUTOS_BLOQUEO} minutos, después de varios intentos fallidos.`
+        });
+      }
+
+      await experto.save();
+      const intentosRestantes = LIMITE_INTENTOS - experto.intentosLoginFallidos;
+      return res.status(401).json({
+        mensaje: `Credenciales incorrectas. Te queda${intentosRestantes === 1 ? '' : 'n'} ${intentosRestantes} intento${intentosRestantes === 1 ? '' : 's'} antes de que tu cuenta se bloquee temporalmente.`
+      });
+    }
+
+    // Login correcto: reiniciamos el contador de intentos fallidos
+    if (experto.intentosLoginFallidos > 0 || experto.bloqueadoHasta) {
+      experto.intentosLoginFallidos = 0;
+      experto.bloqueadoHasta = undefined;
+      await experto.save();
     }
 
     const token = jwt.sign(
