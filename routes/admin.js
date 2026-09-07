@@ -51,7 +51,7 @@ router.put('/expertos/:id/aprobar', verificarToken, verificarAdmin, async (req, 
     const experto = await Experto.findByIdAndUpdate(
       req.params.id,
       { verificado: true },
-      { new: true }
+      { returnDocument: 'after' }
     );
 
     if (!experto) {
@@ -70,7 +70,7 @@ router.put('/expertos/:id/suspender', verificarToken, verificarAdmin, async (req
     const experto = await Experto.findByIdAndUpdate(
       req.params.id,
       { verificado: false },
-      { new: true }
+      { returnDocument: 'after' }
     );
 
     if (!experto) {
@@ -80,6 +80,28 @@ router.put('/expertos/:id/suspender', verificarToken, verificarAdmin, async (req
     res.status(200).json({ mensaje: 'Perfil suspendido correctamente', experto });
   } catch (error) {
     res.status(400).json({ mensaje: 'Error al suspender el perfil', error: error.message });
+  }
+});
+
+// Rechazar (eliminar) una solicitud PENDIENTE de aprobacion. Distinto de
+// "suspender", que es para cuentas YA aprobadas — un pendiente nunca deberia
+// poder "suspenderse", porque ya esta sin verificar desde el principio.
+router.delete('/expertos/:id/rechazar', verificarToken, verificarAdmin, async (req, res) => {
+  try {
+    const experto = await Experto.findById(req.params.id);
+
+    if (!experto) {
+      return res.status(404).json({ mensaje: 'Solicitud no encontrada' });
+    }
+    if (experto.verificado) {
+      return res.status(400).json({ mensaje: 'Esta cuenta ya fue aprobada, no se puede rechazar. Usa "Suspender" en su lugar.' });
+    }
+
+    await Experto.findByIdAndDelete(req.params.id);
+
+    res.status(200).json({ mensaje: 'Solicitud rechazada y eliminada correctamente' });
+  } catch (error) {
+    res.status(400).json({ mensaje: 'Error al rechazar la solicitud', error: error.message });
   }
 });
 
@@ -132,9 +154,9 @@ router.post('/crear-admin', verificarToken, verificarAdmin, async (req, res) => 
 // manualmente en cualquier cuenta mientras Wompi no esta conectado
 router.get('/expertos-todos', verificarToken, verificarAdmin, async (req, res) => {
   try {
-    const expertos = await Experto.find({ rol: 'experto' })
+    const expertos = await Experto.find({ rol: { $in: ['experto', 'cliente'] } })
       .sort({ nombre: 1 })
-      .select('nombre correo plan verificado');
+      .select('nombre correo plan verificado rol');
     res.status(200).json(expertos);
   } catch (error) {
     res.status(500).json({ mensaje: 'Error al obtener expertos', error: error.message });
@@ -421,6 +443,23 @@ router.post('/cobros-pro/:id/verificar', verificarToken, verificarAdmin, async (
     res.status(200).json({ mensaje: `Cobro verificado: quedo ${nuevoEstado}. Se actualizo la cuenta del experto.` });
   } catch (error) {
     res.status(500).json({ mensaje: 'Error al verificar el cobro', error: error.message });
+  }
+});
+
+// Elimina UN registro del historial de cobros (solo el registro guardado en
+// tu base de datos, no reembolsa ni afecta la transaccion real en Wompi).
+// Util para limpiar registros de prueba.
+router.delete('/cobros-pro/:id', verificarToken, verificarAdmin, async (req, res) => {
+  try {
+    const eliminado = await CobroPro.findByIdAndDelete(req.params.id);
+
+    if (!eliminado) {
+      return res.status(404).json({ mensaje: 'Registro no encontrado' });
+    }
+
+    res.status(200).json({ mensaje: 'Registro eliminado del historial correctamente' });
+  } catch (error) {
+    res.status(500).json({ mensaje: 'Error al eliminar el registro', error: error.message });
   }
 });
 
