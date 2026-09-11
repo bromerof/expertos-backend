@@ -63,7 +63,17 @@ router.post('/', verificarToken, async (req, res) => {
 // servicio, usando el mismo numero por el que ya se contactaron.
 router.get('/buscar/:numero', verificarToken, async (req, res) => {
   try {
-    const persona = await Experto.findOne({ whatsapp: req.params.numero });
+    // Averiguamos el rol de quien esta buscando, para solo dejarlo encontrar
+    // a alguien del rol contrario (un experto no debe poder calificar/ver a
+    // otro experto, ni un cliente a otro cliente)
+    const quienBusca = await Experto.findById(req.usuario.id);
+    if (!quienBusca) {
+      return res.status(404).json({ mensaje: 'Cuenta no encontrada' });
+    }
+
+    const rolBuscado = quienBusca.rol === 'cliente' ? 'experto' : 'cliente';
+
+    const persona = await Experto.findOne({ whatsapp: req.params.numero, rol: rolBuscado });
 
     if (!persona) {
       return res.status(404).json({ mensaje: 'No se encontro ninguna cuenta con ese numero de WhatsApp' });
