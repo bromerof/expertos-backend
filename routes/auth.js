@@ -327,10 +327,15 @@ router.post('/restablecer-contrasena', async (req, res) => {
 // formulario de registro (documento, WhatsApp, ciudad, etc.)
 router.post('/google/verificar', async (req, res) => {
   try {
-    const { credential } = req.body;
+    const { credential, rolEsperado } = req.body;
     if (!credential) {
       return res.status(400).json({ mensaje: 'Falta el token de Google' });
     }
+
+    // Por defecto buscamos como cliente (asi el registro de cliente, que no
+    // manda este dato, sigue funcionando igual que antes). El login si manda
+    // el rol exacto que la persona eligio (cliente o experto).
+    const rolBuscado = rolEsperado === 'experto' ? 'experto' : 'cliente';
 
     const ticket = await clienteGoogle.verifyIdToken({
       idToken: credential,
@@ -338,7 +343,7 @@ router.post('/google/verificar', async (req, res) => {
     });
     const datosGoogle = ticket.getPayload();
 
-    const experto = await Experto.findOne({ correo: datosGoogle.email.toLowerCase(), rol: 'cliente' });
+    const experto = await Experto.findOne({ correo: datosGoogle.email.toLowerCase(), rol: rolBuscado });
 
     if (experto) {
       const token = jwt.sign(
